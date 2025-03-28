@@ -1,3 +1,8 @@
+from synapse_mcp.entities.croissant import Croissant
+
+def test_croissant():
+    croissant = Croissant()
+    assert croissant.get_id() is not None
 import importlib.util
 import os
 import sys
@@ -20,7 +25,9 @@ class TestPackageInstallation(unittest.TestCase):
         
         from synapse_mcp import utils
         self.assertIsNotNone(utils)
-
+        
+        from synapse_mcp import croissant
+        self.assertIsNotNone(croissant)
         
         # Test entities subpackage
         from synapse_mcp.entities import base

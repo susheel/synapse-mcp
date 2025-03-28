@@ -1,14 +1,14 @@
 [project]
 name = "synapse-mcp"
 version = "0.1.0"
-description = "A Model Context Protocol (MCP) server that exposes Synapse Entities"
+description = "A Model Context Protocol (MCP) server that exposes Synapse Entities with Croissant metadata support"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Sage Bionetworks", email = "info@sagebionetworks.org"}
+    {name = "Sage Bionetworks", email = "susheel.varma@sagebase.org"}
 ]
-keywords = ["synapse", "mcp", "metadata", "bioinformatics"]
+keywords = ["synapse", "mcp", "croissant", "metadata", "bioinformatics"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",

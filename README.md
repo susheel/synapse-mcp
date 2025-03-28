@@ -180,6 +180,21 @@ table_data = response.json()
 print(table_data)
 ```
 
+### Getting Datasets in Croissant Format
+
+```python
+import requests
+import json
+
+# Get public datasets in Croissant format
+response = requests.get("http://127.0.0.1:9000/resources/croissant/datasets")
+croissant_data = response.json()
+
+# Save to file
+with open("croissant_metadata.json", "w") as f:
+    json.dump(croissant_data, f, indent=2)
+```
+
 ## License
 
 MIT

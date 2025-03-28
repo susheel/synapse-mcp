@@ -70,6 +70,10 @@ async def list_tools():
         {
             "name": "query_table",
             "description": "Query a Synapse table"
+        },
+        {
+            "name": "get_datasets_as_croissant",
+            "description": "Get public datasets in Croissant metadata format"
         }
     ]
 
@@ -228,6 +232,12 @@ async def tool_query_table(request: Request):
     data = await request.json()
     return query_table(**data)
 
+@app.post("/tools/get_datasets_as_croissant")
+async def tool_get_datasets_as_croissant(request: Request):
+    """Get public datasets in Croissant metadata format."""
+    data = await request.json()
+    return get_datasets_as_croissant(**data)
+
 # Resource endpoints
 @app.get("/resources/entities/{id_or_name}")
 async def resource_get_entity(id_or_name: str):
@@ -376,6 +386,11 @@ async def resource_get_table_parent(id: str):
 async def resource_query_table(id: str, query: str):
     """Query a table with SQL-like syntax."""
     return query_table(table_id=id, query=query)
+
+@app.get("/resources/croissant/datasets")
+async def resource_get_datasets_as_croissant():
+    """Get public datasets in Croissant metadata format."""
+    return get_datasets_as_croissant()
     
 def main():
     """Run the Synapse MCP server."""

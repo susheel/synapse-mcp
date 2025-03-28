@@ -43,6 +43,26 @@ class TestServer(unittest.TestCase):
         data = response.json()
         self.assertIsInstance(data, list)
         
+    @patch('src.synapse_mcp.get_datasets_as_croissant')
+    def test_get_datasets_as_croissant(self, mock_get_datasets):
+        """Test the Croissant datasets endpoint."""
+        # Setup mock
+        mock_data = {
+            "@type": "Dataset",
+            "name": "Test Dataset",
+            "dataset": []
+        }
+        mock_get_datasets.return_value = mock_data
+        
+        # Call the endpoint
+        response = self.client.get("/resources/croissant/datasets")
+        
+        # Assert
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data, mock_data)
+        mock_get_datasets.assert_called_once()
+        
     @patch('src.synapse_mcp.authenticate')
     def test_authenticate(self, mock_authenticate):
         """Test the authenticate endpoint."""

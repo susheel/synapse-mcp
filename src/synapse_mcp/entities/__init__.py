@@ -4,6 +4,7 @@ from .folder import FolderOperations
 from .file import FileOperations
 from .table import TableOperations
 from .dataset import DatasetOperations
+from .croissant import convert_to_croissant, create_dataset_entry, get_value_or_default
 
 __all__ = [
     'BaseEntityOperations',
@@ -12,4 +13,7 @@ __all__ = [
     'FileOperations',
     'TableOperations',
     'DatasetOperations',
+    'convert_to_croissant',
+    'create_dataset_entry',
+    'get_value_or_default',
 ]
