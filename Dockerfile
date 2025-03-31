@@ -12,8 +12,10 @@ RUN pip install --no-cache-dir -e .
 EXPOSE 9000
 
 # Set environment variables
-ENV HOST=0.0.0.0
-ENV PORT=9000
+ENV HOST="0.0.0.0"
+ENV PORT="9000"
+ENV MCP_TRANSPORT="sse"
+ENV MCP_SERVER_URL="mcp://127.0.0.1:9000"
 
 # Command to run the server
-CMD ["python", "server.py", "--host", "0.0.0.0", "--port", "9000", "--server-url", "${MCP_SERVER_URL}"]
+CMD ["python", "server.py", "--host", "0.0.0.0", "--port", "9000"]

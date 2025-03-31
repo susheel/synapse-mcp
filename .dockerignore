@@ -1,0 +1,58 @@
+# flyctl launch added from .gitignore
+# Python build artifacts
+**/__pycache__
+**/*.py[cod]
+**/*$py.class
+**/*.so
+**/.Python
+**/build
+**/develop-eggs
+**/dist
+**/downloads
+**/eggs
+**/.eggs
+**/lib
+**/lib64
+**/parts
+**/sdist
+**/var
+**/wheels
+**/*.egg-info
+**/.installed.cfg
+**/*.egg
+
+# Virtual environments
+**/.env
+**/.venv
+**/env
+**/venv
+**/ENV
+**/env.bak
+**/venv.bak
+
+# IDE files
+**/.idea
+**/.vscode
+**/*.swp
+**/*.swo
+**/.DS_Store
+
+# Jupyter Notebook
+**/.ipynb_checkpoints
+
+# Local development
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+
+# Croissant metadata output
+**/croissant_metadata.json
+
+# flyctl launch added from .pytest_cache/.gitignore
+# Created by pytest automatically.
+.pytest_cache/**/*
+
+# flyctl launch added from .venv/.gitignore
+.venv/**/*
+fly.toml

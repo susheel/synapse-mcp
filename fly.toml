@@ -1,29 +1,41 @@
-app = "synapse-mcp"
-primary_region = "sea"
+# fly.toml app configuration file generated for synapse-mcp on 2025-03-31T06:41:06+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'synapse-mcp'
+primary_region = 'sea'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
+
+[env]
+  MCP_SERVER_URL = 'mcp://synapse-mcp.fly.dev:9000'
+  PORT = '9000'
+  HOST = '0.0.0.0'
+  MCP_TRANSPORT = 'sse'
 
 [http_service]
   internal_port = 9000
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
+  processes = ['app']
 
-[env]
-  PORT = "9000"
-  MCP_SERVER_URL = "https://synapse-mcp.fly.dev" 
+  [http_service.concurrency]
+    type = 'connections'
+    hard_limit = 1000
+    soft_limit = 500
 
-[http_service.concurrency]
-  type = "connections"
-  hard_limit = 1000
-  soft_limit = 500
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/info'
 
-[[http_service.checks]]
-  grace_period = "10s"
-  interval = "30s"
-  method = "GET"
-  path = "/info"
-  timeout = "5s"
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1

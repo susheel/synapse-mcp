@@ -35,7 +35,7 @@ async def get_info():
     """Get server info."""
     return {
         "name": "Synapse MCP Server",
-        "url": os.environ.get("MCP_SERVER_URL", "mcp://127.0.0.1:9000"),
+        "url": os.environ.get("MCP_SERVER_URL", f"mcp://{os.environ.get('HOST', '127.0.0.1')}:{os.environ.get('PORT', '9000')}"),
         "oauth_enabled": True,
         "version": "0.1.0"
     }
@@ -452,8 +452,15 @@ def main():
     )
     
     # Set server URL for OAuth2
+    server_url = None
     if args.server_url:
-        os.environ["MCP_SERVER_URL"] = args.server_url
+        server_url = args.server_url
+    elif "MCP_SERVER_URL" in os.environ:
+        server_url = os.environ["MCP_SERVER_URL"]
+    else:
+        # Default server URL based on host and port
+        server_url = f"mcp://{args.host}:{args.port}"
+        os.environ["MCP_SERVER_URL"] = server_url
     
     # Log server information
     logger = logging.getLogger("synapse_mcp")
@@ -461,7 +468,7 @@ def main():
     
     # Run the server using uvicorn
     try:
-        uvicorn.run(app, host=args.host, port=args.port)
+        uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
     except Exception as e:

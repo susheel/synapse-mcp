@@ -1,6 +1,7 @@
 from mcp.server.fastmcp import FastMCP
 from typing import Dict, List, Any, Optional, Union
 import synapseclient
+import os
 
 from .auth import SynapseAuth
 from .entities import (
@@ -484,7 +485,19 @@ def query_table_resource(id: str, query: str) -> Dict[str, Any]:
     return query_table(id, decoded_query)
 
 # Function to run the server
-def run_server(host: str = "127.0.0.1", port: int = 9000):
+def run_server(host: str = "127.0.0.1", port: int = 9000, server_url: Optional[str] = None):
     """Run the MCP server."""
-    # Run the server using the run method with SSE transport
-    mcp.run(transport='sse')
+    # Determine the transport type based on environment variable
+    # Use STDIO for local development and SSE for cloud deployment
+    transport_env = os.environ.get("MCP_TRANSPORT", "stdio").lower()
+    
+    # Ensure transport is one of the allowed literal values
+    if transport_env == "sse":
+        transport = "sse"
+    else:
+        transport = "stdio"  # Default to stdio for local development
+    
+    # Set the server URL if provided
+    if server_url:
+        os.environ["MCP_SERVER_URL"] = server_url or "mcp://127.0.0.1:9000"
+    mcp.run(transport=transport)

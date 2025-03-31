@@ -87,6 +87,18 @@ python examples/client_example.py
 
 ## Authentication Methods
 
+### Environment Variables
+
+The server supports the following environment variables:
+
+- `HOST`: The host to bind to (default: 127.0.0.1)
+- `PORT`: The port to listen on (default: 9000)
+- `MCP_TRANSPORT`: The transport protocol to use (default: stdio)
+  - `stdio`: Use standard input/output for local development
+  - `sse`: Use Server-Sent Events for cloud deployment
+- `MCP_SERVER_URL`: The public URL of the server (default: mcp://127.0.0.1:9000)
+  - Used for OAuth2 redirect and server information
+
 The server supports two authentication methods:
 
 1. **Auth Token**: Authenticate using a Synapse authentication token
@@ -251,6 +263,7 @@ docker build -t synapse-mcp .
 
 # Run the container
 docker run -p 9000:9000 -e SYNAPSE_OAUTH_CLIENT_ID=your_client_id -e SYNAPSE_OAUTH_CLIENT_SECRET=your_client_secret -e SYNAPSE_OAUTH_REDIRECT_URI=your_redirect_uri synapse-mcp
+docker run -p 9000:9000 -e MCP_TRANSPORT=sse -e MCP_SERVER_URL=mcp://your-domain:9000 synapse-mcp
 ```
 
 ### Fly.io
@@ -271,6 +284,8 @@ flyctl launch
 flyctl secrets set SYNAPSE_OAUTH_CLIENT_ID=your_client_id
 flyctl secrets set SYNAPSE_OAUTH_CLIENT_SECRET=your_client_secret
 flyctl secrets set SYNAPSE_OAUTH_REDIRECT_URI=https://your-app-name.fly.dev/oauth/callback
+flyctl secrets set MCP_TRANSPORT=sse
+flyctl secrets set MCP_SERVER_URL=mcp://your-app-name.fly.dev:9000
 
 # Deploy
 flyctl deploy
@@ -294,6 +309,8 @@ vercel
 # - SYNAPSE_OAUTH_CLIENT_ID
 # - SYNAPSE_OAUTH_CLIENT_SECRET
 # - SYNAPSE_OAUTH_REDIRECT_URI
+# - MCP_TRANSPORT=sse
+# - MCP_SERVER_URL=mcp://your-app-name.vercel.app:9000
 
 # Deploy to production
 vercel --prod
