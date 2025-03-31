@@ -5,7 +5,7 @@ Tests for the authentication functionality.
 
 import unittest
 from unittest.mock import MagicMock, patch
-from synapse-mcp.auth import SynapseAuth
+from synapse_mcp.auth import SynapseAuth
 
 class TestSynapseAuth(unittest.TestCase):
     """Test the Synapse authentication functionality."""

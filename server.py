@@ -9,11 +9,12 @@ import sys
 import os
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import HTMLResponse
 
 # Import the MCP server
-from synapse_mcp import mcp, authenticate, get_entity, get_entity_annotations, get_entity_children, search_entities
+from synapse_mcp import mcp, authenticate, get_oauth_url, get_entity, get_entity_annotations, get_entity_children, search_entities, get_datasets_as_croissant
 from synapse_mcp import query_entities, query_table
 
 # Create a FastAPI app
@@ -34,7 +35,8 @@ async def get_info():
     """Get server info."""
     return {
         "name": "Synapse MCP Server",
-        "url": "mcp://127.0.0.1:9000",
+        "url": os.environ.get("MCP_SERVER_URL", "mcp://127.0.0.1:9000"),
+        "oauth_enabled": True,
         "version": "0.1.0"
     }
 
@@ -45,7 +47,12 @@ async def list_tools():
     return [
         {
             "name": "authenticate",
-            "description": "Authenticate with Synapse using Auth Token"
+            "description": "Authenticate with Synapse using Auth Token or OAuth2"
+        },
+        {
+            "name": "get_oauth_url",
+            "description": "Get the OAuth2 authorization URL for Synapse"
+            
         },
         {
             "name": "get_entity",
@@ -194,6 +201,42 @@ async def tool_authenticate(request: Request):
     """Authenticate with Synapse."""
     data = await request.json()
     return authenticate(**data)
+
+@app.post("/tools/get_oauth_url")
+async def tool_get_oauth_url(request: Request):
+    """Get the OAuth2 authorization URL for Synapse."""
+    data = await request.json()
+    return get_oauth_url(**data)
+
+# OAuth2 endpoints
+@app.get("/oauth/login")
+async def oauth_login(client_id: str, redirect_uri: str, scope: str = "view"):
+    """Redirect to Synapse OAuth2 login page."""
+    result = get_oauth_url(client_id=client_id, redirect_uri=redirect_uri, scope=scope)
+    if result.get("success", False):
+        return RedirectResponse(url=result["auth_url"])
+    return {"error": result.get("message", "Failed to generate OAuth URL")}
+
+@app.get("/oauth/callback")
+async def oauth_callback(code: str, state: str = "", client_id: str = "", redirect_uri: str = ""):
+    """Handle OAuth2 callback from Synapse."""
+    # If client_id and redirect_uri are not provided in the query params,
+    # try to get them from environment variables
+    client_id = client_id or os.environ.get("SYNAPSE_OAUTH_CLIENT_ID", "")
+    redirect_uri = redirect_uri or os.environ.get("SYNAPSE_OAUTH_REDIRECT_URI", "")
+    client_secret = os.environ.get("SYNAPSE_OAUTH_CLIENT_SECRET", "")
+    
+    if not client_id or not redirect_uri or not client_secret:
+        return {"error": "Missing OAuth2 configuration. Please provide client_id, redirect_uri, and ensure client_secret is set in environment variables."}
+    
+    # Authenticate with the code
+    result = authenticate(
+        oauth_code=code, 
+        redirect_uri=redirect_uri,
+        client_id=client_id,
+        client_secret=client_secret
+    )
+    return result
 
 @app.post("/tools/get_entity")
 async def tool_get_entity(request: Request):
@@ -398,6 +441,7 @@ def main():
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind to")
     parser.add_argument("--port", type=int, default=9000, help="Port to listen on")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--server-url", help="Public URL of the server (for OAuth2 redirect)")
     args = parser.parse_args()
     
     # Configure logging
@@ -406,6 +450,10 @@ def main():
         level=log_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
+    
+    # Set server URL for OAuth2
+    if args.server_url:
+        os.environ["MCP_SERVER_URL"] = args.server_url
     
     # Log server information
     logger = logging.getLogger("synapse_mcp")

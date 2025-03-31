@@ -13,6 +13,7 @@ from .entities import (
 )
 from .query import QueryBuilder
 from .utils import validate_synapse_id, format_annotations
+from .entities.croissant import convert_to_croissant
 
 # Create an MCP server with a placeholder URL
 # The actual URL will be set when the server is run
@@ -25,7 +26,7 @@ query_builder = None
 
 # Authentication Tool
 @mcp.tool()
-def authenticate(auth_token: Optional[str] = None) -> Dict[str, Any]:
+def authenticate(auth_token: Optional[str] = None, oauth_code: Optional[str] = None, redirect_uri: Optional[str] = None, client_id: Optional[str] = None, client_secret: Optional[str] = None) -> Dict[str, Any]:
     """Authenticate with Synapse using Auth Token.
     
     Args:
@@ -37,7 +38,14 @@ def authenticate(auth_token: Optional[str] = None) -> Dict[str, Any]:
     global entity_ops, query_builder
     try:
         # Authenticate with Synapse
-        auth_manager.authenticate(auth_token=auth_token)
+        if oauth_code and redirect_uri and client_id and client_secret:
+            # OAuth2 authentication
+            result = auth_manager.authenticate_with_oauth(
+                code=oauth_code, redirect_uri=redirect_uri, 
+                client_id=client_id, client_secret=client_secret
+            )
+            if not result.get("success", False):
+                return result
         
         # Get the authenticated client
         synapse_client = auth_manager.get_client()
@@ -64,6 +72,25 @@ def authenticate(auth_token: Optional[str] = None) -> Dict[str, Any]:
             'success': False,
             'message': f'Authentication failed: {str(e)}'
         }
+
+@mcp.tool()
+def get_oauth_url(client_id: str, redirect_uri: str, scope: str = "view") -> Dict[str, Any]:
+    """Get the OAuth2 authorization URL for Synapse.
+    
+    Args:
+        client_id: OAuth2 client ID
+        redirect_uri: Redirect URI for the OAuth2 flow
+        scope: OAuth2 scope (default: "view")
+        
+    Returns:
+        The OAuth2 authorization URL
+    """
+    try:
+        auth_url = auth_manager.get_oauth_url(client_id, redirect_uri, scope)
+        return {"success": True, "auth_url": auth_url}
+    except Exception as e:
+        return {"success": False, "message": f"Failed to generate OAuth URL: {str(e)}"}
+
 
 # Entity Retrieval Tools
 @mcp.tool()

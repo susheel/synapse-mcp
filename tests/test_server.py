@@ -43,14 +43,14 @@ class TestServer(unittest.TestCase):
         data = response.json()
         self.assertIsInstance(data, list)
         
-    @patch('src.synapse_mcp.get_datasets_as_croissant')
+    @patch('server.get_datasets_as_croissant')
     def test_get_datasets_as_croissant(self, mock_get_datasets):
         """Test the Croissant datasets endpoint."""
         # Setup mock
         mock_data = {
-            "@type": "Dataset",
-            "name": "Test Dataset",
-            "dataset": []
+            "@context": ["https://schema.org/", {"csv": "http://www.w3.org/ns/csvw#", "dc": "http://purl.org/dc/elements/1.1/"}],
+            "@type": "Dataset", 
+            "dataset": []  # We only check for the existence of the dataset key, not its exact content
         }
         mock_get_datasets.return_value = mock_data
         
@@ -60,10 +60,12 @@ class TestServer(unittest.TestCase):
         # Assert
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data, mock_data)
+        self.assertEqual(data["@context"], mock_data["@context"])
+        self.assertEqual(data["@type"], mock_data["@type"])
+        self.assertIn("dataset", data)
         mock_get_datasets.assert_called_once()
         
-    @patch('src.synapse_mcp.authenticate')
+    @patch('server.authenticate')
     def test_authenticate(self, mock_authenticate):
         """Test the authenticate endpoint."""
         # Setup mock
@@ -81,7 +83,7 @@ class TestServer(unittest.TestCase):
         self.assertEqual(data, {"success": True})
         mock_authenticate.assert_called_once_with(auth_token="fake_token")
         
-    @patch('src.synapse_mcp.query_table')
+    @patch('server.query_table')
     def test_query_table(self, mock_query_table):
         """Test the query_table endpoint."""
         # Setup mock

@@ -1,6 +1,6 @@
 # Synapse MCP Server
 
-A Model Context Protocol (MCP) server that exposes Synapse Entities (Datasets, Projects, Folders, Files, Tables) with their annotations.
+A Model Context Protocol (MCP) server that exposes Synapse Entities (Datasets, Projects, Folders, Files, Tables) with their annotations and supports OAuth2 authentication.
 
 ## Overview
 
@@ -8,10 +8,12 @@ This server provides a RESTful API for accessing Synapse entities and their anno
 
 - Authenticate with Synapse
 - Retrieve entities by ID
+- Retrieve entities by name
 - Get entity annotations
 - Get entity children
 - Query entities based on various criteria
 - Query Synapse tables
+- Get datasets in Croissant metadata format
 
 ## Installation
 
@@ -40,7 +42,7 @@ pip install synapse-mcp
 ### Starting the Server
 
 ```bash
-python server.py
+python server.py --host 127.0.0.1 --port 9000
 ```
 
 This will start the MCP server on the default port (9000).
@@ -57,13 +59,14 @@ synapse-mcp --host 127.0.0.1 --port 9000 --debug
 ```
 usage: server.py [-h] [--host HOST] [--port PORT] [--debug]
 
-Run the Synapse MCP server
+Run the Synapse MCP server with OAuth2 support
 
 options:
-  -h, --help     show this help message and exit
-  --host HOST    Host to bind to
-  --port PORT    Port to listen on
-  --debug        Enable debug logging
+  -h, --help       show this help message and exit
+  --host HOST      Host to bind to
+  --port PORT      Port to listen on
+  --debug          Enable debug logging
+  --server-url URL Public URL of the server (for OAuth2 redirect)
 ```
 
 ### Running Tests
@@ -82,6 +85,14 @@ python -m pytest
 python examples/client_example.py
 ```
 
+## Authentication Methods
+
+The server supports two authentication methods:
+
+1. **Auth Token**: Authenticate using a Synapse authentication token
+2. **OAuth2**: Authenticate using Synapse's OAuth2 server
+   - Requires registering an OAuth2 client in Synapse (https://www.synapse.org/#!PersonalAccessTokens:OAuth)
+
 ## API Endpoints
 
 ### Server Information
@@ -92,7 +103,8 @@ python examples/client_example.py
 
 - `GET /tools` - List available tools
 - `POST /tools/authenticate` - Authenticate with Synapse
-- `POST /tools/get_entity` - Get an entity by ID
+- `POST /tools/get_oauth_url` - Get the OAuth2 authorization URL
+- `POST /tools/get_entity` - Get an entity by ID or name
 - `POST /tools/get_entity_annotations` - Get annotations for an entity
 - `POST /tools/get_entity_children` - Get child entities of a container entity
 - `POST /tools/query_entities` - Query entities based on various criteria
@@ -108,6 +120,12 @@ python examples/client_example.py
 - `GET /resources/query/entities/parent/{parent_id}` - Query entities by parent ID
 - `GET /resources/query/entities/name/{name}` - Query entities by name
 - `GET /resources/query/table/{id}/{query}` - Query a table with SQL-like syntax
+
+### OAuth2 Endpoints
+
+- `GET /oauth/login` - Redirect to Synapse OAuth2 login page
+- `GET /oauth/callback` - Handle OAuth2 callback from Synapse
+
 
 ## Examples
 
@@ -131,6 +149,32 @@ response = requests.post("http://127.0.0.1:9000/tools/authenticate", json={
     "api_key": "your-synapse-api-key"
 })
 ```
+
+### OAuth2 Authentication
+
+#### 1. Redirect Flow (Browser-based)
+
+Direct users to the OAuth login URL:
+```
+http://127.0.0.1:9000/oauth/login?client_id=YOUR_CLIENT_ID&redirect_uri=YOUR_REDIRECT_URI
+```
+
+#### 2. API-based Flow
+
+For programmatic use, first get the authorization URL:
+
+```python
+import requests
+
+# Get OAuth2 authorization URL
+response = requests.post("http://127.0.0.1:9000/tools/get_oauth_url", json={
+    "client_id": "YOUR_CLIENT_ID",
+    "redirect_uri": "YOUR_REDIRECT_URI"
+})
+auth_url = response.json()["auth_url"]
+# Redirect user to auth_url
+```
+
 
 ### Getting an Entity
 
@@ -194,6 +238,70 @@ croissant_data = response.json()
 with open("croissant_metadata.json", "w") as f:
     json.dump(croissant_data, f, indent=2)
 ```
+
+## Deployment
+
+### Docker
+
+You can build and run the server using Docker:
+
+```bash
+# Build the Docker image
+docker build -t synapse-mcp .
+
+# Run the container
+docker run -p 9000:9000 -e SYNAPSE_OAUTH_CLIENT_ID=your_client_id -e SYNAPSE_OAUTH_CLIENT_SECRET=your_client_secret -e SYNAPSE_OAUTH_REDIRECT_URI=your_redirect_uri synapse-mcp
+```
+
+### Fly.io
+
+Deploy to fly.io:
+
+```bash
+# Install flyctl
+curl -L https://fly.io/install.sh | sh
+
+# Login to fly.io
+flyctl auth login
+
+# Launch the app
+flyctl launch
+
+# Set OAuth2 secrets
+flyctl secrets set SYNAPSE_OAUTH_CLIENT_ID=your_client_id
+flyctl secrets set SYNAPSE_OAUTH_CLIENT_SECRET=your_client_secret
+flyctl secrets set SYNAPSE_OAUTH_REDIRECT_URI=https://your-app-name.fly.dev/oauth/callback
+
+# Deploy
+flyctl deploy
+```
+
+### Vercel
+
+Deploy to Vercel:
+
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Login to Vercel
+vercel login
+
+# Deploy
+vercel
+
+# Set environment variables in Vercel dashboard:
+# - SYNAPSE_OAUTH_CLIENT_ID
+# - SYNAPSE_OAUTH_CLIENT_SECRET
+# - SYNAPSE_OAUTH_REDIRECT_URI
+
+# Deploy to production
+vercel --prod
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
