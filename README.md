@@ -291,30 +291,52 @@ flyctl secrets set MCP_SERVER_URL=mcp://your-app-name.fly.dev:9000
 flyctl deploy
 ```
 
-### Vercel
+### Integrating with Claude Desktop
 
-Deploy to Vercel:
+You can integrate this Synapse MCP server with Claude Desktop to enable Claude to access and work with Synapse data directly in your conversations.
+
+### Setup Instructions
+
+1. First, clone the repository and install the requirements:
 
 ```bash
-# Install Vercel CLI
-npm i -g vercel
+# Clone the repository
+git clone https://github.com/susheel/synapse-mcp.git
+cd synapse-mcp
 
-# Login to Vercel
-vercel login
+# Create a virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Deploy
-vercel
-
-# Set environment variables in Vercel dashboard:
-# - SYNAPSE_OAUTH_CLIENT_ID
-# - SYNAPSE_OAUTH_CLIENT_SECRET
-# - SYNAPSE_OAUTH_REDIRECT_URI
-# - MCP_TRANSPORT=sse
-# - MCP_SERVER_URL=mcp://your-app-name.vercel.app:9000
-
-# Deploy to production
-vercel --prod
+# Install dependencies
+pip install -e .
 ```
+
+2. Configure Claude Desktop to use the Synapse MCP server:
+
+   - Open Claude Desktop
+   - Click on the Claude menu and select "Settings..."
+   - Click on "Developer" in the left-hand bar
+   - Click on "Edit Config"
+   - Add the following configuration to the `mcpServers` section:
+
+```json
+"synapse-mcp": {
+  "command": "python",
+  "args": [
+    "/path/to/synapse-mcp/server.py",
+    "--host", "127.0.0.1",
+    "--port", "9000"
+  ]
+}
+```
+
+3. Save the configuration file and restart Claude Desktop
+
+4. You can now use Synapse data in your conversations with Claude. For example:
+   - "Get the entity with ID syn123456 from Synapse"
+   - "Query all files in the Synapse project syn123456"
+   - "Get annotations for the Synapse entity syn123456"
 
 ## Contributing
 
