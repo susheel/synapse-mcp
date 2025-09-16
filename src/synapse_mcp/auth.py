@@ -73,7 +73,7 @@ class SynapseAuth:
         
         Returns the URL to redirect the user to for OAuth2 authorization.
         """
-        auth_url = f"https://repo-prod.prod.sagebase.org/auth/v1/oauth2/authorize?{urlencode({'client_id': client_id, 'redirect_uri': redirect_uri, 'response_type': 'code', 'scope': scope})}"
+        auth_url = f"https://signin.synapse.org?{urlencode({'client_id': client_id, 'redirect_uri': redirect_uri, 'response_type': 'code', 'scope': f'openid {scope}'})}"
         return auth_url
     def get_client(self) -> synapseclient.Synapse:
         """Get the authenticated Synapse client."""
