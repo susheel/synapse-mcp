@@ -7,9 +7,8 @@ import argparse
 import logging
 import sys
 import uvicorn
-from synapse_mcp import init_mcp
-
-from . import server
+import os
+from synapse_mcp import mcp, server
 
 def main():
     """Run the Synapse MCP server."""
@@ -30,8 +29,9 @@ def main():
     logger = logging.getLogger("synapse_mcp")
     logger.info(f"Starting Synapse MCP server on {args.host}:{args.port}")
 
-    # Initialize the MCP server
-    init_mcp(f"mcp://{args.host}:{args.port}")
+    # Set the server URL
+    server_url = os.environ.get("MCP_SERVER_URL", f"mcp://{args.host}:{args.port}")
+    mcp.server_url = server_url
 
     # Run the server using uvicorn
     try:

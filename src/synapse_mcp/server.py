@@ -16,8 +16,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import HTMLResponse
 
-# Import the MCP server
-from synapse_mcp import mcp, init_mcp, authenticate, get_oauth_url, get_entity, get_entity_annotations, get_entity_children, search_entities, get_datasets_as_croissant
+from synapse_mcp import mcp, authenticate, get_oauth_url, get_entity, get_entity_annotations, get_entity_children, search_entities, get_datasets_as_croissant
 from synapse_mcp import query_entities, query_table
 
 # Create FastAPI app for REST endpoints
@@ -573,9 +572,8 @@ def main():
     logger = logging.getLogger("synapse_mcp")
     logger.info(f"Starting Synapse MCP server on {args.host}:{args.port}")
     
-    # Initialize MCP server
-    init_mcp(server_url)
-    
+    # Set the server URL
+    mcp.server_url = server_url
     # Run the server using uvicorn
     try:
         uvicorn.run(app, host=args.host, port=args.port, log_level="info")
