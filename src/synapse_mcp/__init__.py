@@ -22,7 +22,8 @@ mcp = FastMCP("Synapse MCP Server")
 
 # Initialize with a public (unauthenticated) client
 # This allows access to public resources without logging in
-try:
+# This allows access to public resources without logging in
+auth_manager = SynapseAuth()
 try:
     synapse_public_client = synapseclient.Synapse()
     entity_ops = {
