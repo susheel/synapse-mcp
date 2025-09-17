@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-Script to run the Synapse MCP server.
+Script to run the Synapse MCP server with SSE support.
 """
 
 import argparse
 import logging
 import sys
 import os
+import uuid
+import time
+import urllib.parse
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -17,7 +20,7 @@ from starlette.responses import HTMLResponse
 from synapse_mcp import mcp, authenticate, get_oauth_url, get_entity, get_entity_annotations, get_entity_children, search_entities, get_datasets_as_croissant
 from synapse_mcp import query_entities, query_table
 
-# Create a FastAPI app
+# Create FastAPI app for REST endpoints
 app = FastAPI(title="Synapse MCP Server")
 
 # Add CORS middleware
@@ -28,6 +31,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# In-memory session storage for OAuth flow
+# In production, use Redis or database
+oauth_sessions = {}
+
+# Get the MCP streamable HTTP app and mount it at root
+mcp_app = mcp.streamable_http_app()
+
+# Replace the entire app with MCP app, but add our routes first
+from fastapi import Request as FastAPIRequest
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # Server info endpoint
 @app.get("/info")
@@ -209,6 +223,53 @@ async def tool_get_oauth_url(request: Request):
     return get_oauth_url(**data)
 
 # OAuth2 endpoints
+@app.get("/authorize")
+async def oauth_authorize(
+    response_type: str,
+    client_id: str,
+    redirect_uri: str,
+    state: str = "",
+    code_challenge: str = "",
+    code_challenge_method: str = "S256",
+    scope: str = "view"
+):
+    """Handle OAuth2 authorization request with PKCE support."""
+    # Generate session ID to track this OAuth flow
+    session_id = str(uuid.uuid4())
+
+    # Store client's callback info and PKCE parameters
+    oauth_sessions[session_id] = {
+        "client_redirect_uri": redirect_uri,
+        "client_state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": code_challenge_method,
+        "client_id": client_id,
+        "scope": scope,
+        "timestamp": time.time()
+    }
+
+    # Get server's callback URL for Synapse OAuth
+    server_callback = os.environ.get("SYNAPSE_OAUTH_REDIRECT_URI",
+                                   "https://synapse-research-mcp.fly.dev/oauth/callback")
+
+    # Get Synapse OAuth URL using server's configured client
+    result = get_oauth_url(
+        client_id=os.environ.get("SYNAPSE_OAUTH_CLIENT_ID"),
+        redirect_uri=server_callback,
+        scope=scope
+    )
+
+    if result.get("success", False):
+        # Use session_id as state to track this flow
+        auth_url = result["auth_url"]
+        separator = "&" if "?" in auth_url else "?"
+        auth_url += f"{separator}state={session_id}"
+        return RedirectResponse(url=auth_url)
+
+    # Clean up session on error
+    oauth_sessions.pop(session_id, None)
+    return {"error": result.get("message", "Failed to generate OAuth URL")}
+
 @app.get("/oauth/login")
 async def oauth_login(client_id: str, redirect_uri: str, scope: str = "view"):
     """Redirect to Synapse OAuth2 login page."""
@@ -218,25 +279,62 @@ async def oauth_login(client_id: str, redirect_uri: str, scope: str = "view"):
     return {"error": result.get("message", "Failed to generate OAuth URL")}
 
 @app.get("/oauth/callback")
-async def oauth_callback(code: str, state: str = "", client_id: str = "", redirect_uri: str = ""):
-    """Handle OAuth2 callback from Synapse."""
-    # If client_id and redirect_uri are not provided in the query params,
-    # try to get them from environment variables
-    client_id = client_id or os.environ.get("SYNAPSE_OAUTH_CLIENT_ID", "")
-    redirect_uri = redirect_uri or os.environ.get("SYNAPSE_OAUTH_REDIRECT_URI", "")
+async def oauth_callback(code: str, state: str = "", error: str = "", error_description: str = ""):
+    """Handle OAuth2 callback from Synapse and forward to client."""
+    # Handle OAuth errors
+    if error:
+        return {"error": error, "error_description": error_description}
+
+    # Get session info using state parameter
+    session_id = state
+    session = oauth_sessions.get(session_id)
+
+    if not session:
+        return {"error": "Invalid or expired OAuth session"}
+
+    # Get server OAuth config
+    client_id = os.environ.get("SYNAPSE_OAUTH_CLIENT_ID", "")
+    redirect_uri = os.environ.get("SYNAPSE_OAUTH_REDIRECT_URI", "")
     client_secret = os.environ.get("SYNAPSE_OAUTH_CLIENT_SECRET", "")
-    
+
     if not client_id or not redirect_uri or not client_secret:
-        return {"error": "Missing OAuth2 configuration. Please provide client_id, redirect_uri, and ensure client_secret is set in environment variables."}
-    
-    # Authenticate with the code
-    result = authenticate(
-        oauth_code=code, 
+        oauth_sessions.pop(session_id, None)
+        return {"error": "Missing OAuth2 server configuration"}
+
+    # Exchange authorization code for tokens with Synapse
+    auth_result = authenticate(
+        oauth_code=code,
         redirect_uri=redirect_uri,
         client_id=client_id,
         client_secret=client_secret
     )
-    return result
+
+    # Clean up session
+    oauth_sessions.pop(session_id, None)
+
+    # Forward result to client's callback URL
+    client_callback_url = session["client_redirect_uri"]
+    client_state = session["client_state"]
+
+    if auth_result.get("success", False):
+        # Success: forward auth code/token to client
+        callback_params = {
+            "code": code,  # Forward the code, or could be a token
+            "state": client_state
+        }
+    else:
+        # Error: forward error to client
+        callback_params = {
+            "error": "authorization_failed",
+            "error_description": auth_result.get("message", "Authentication failed"),
+            "state": client_state
+        }
+
+    # Build callback URL with parameters
+    separator = "&" if "?" in client_callback_url else "?"
+    callback_url = client_callback_url + separator + urllib.parse.urlencode(callback_params)
+
+    return RedirectResponse(url=callback_url)
 
 @app.post("/tools/get_entity")
 async def tool_get_entity(request: Request):
@@ -434,6 +532,9 @@ async def resource_query_table(id: str, query: str):
 async def resource_get_datasets_as_croissant():
     """Get public datasets in Croissant metadata format."""
     return get_datasets_as_croissant()
+
+# Mount MCP app to handle streamable HTTP at /mcp
+app.mount("/mcp", mcp_app)
     
 def main():
     """Run the Synapse MCP server."""
