@@ -7,8 +7,9 @@ import argparse
 import logging
 import sys
 import uvicorn
-import os
-import importlib.util
+from synapse_mcp import init_mcp
+
+from . import server
 
 def main():
     """Run the Synapse MCP server."""
@@ -29,43 +30,22 @@ def main():
     logger = logging.getLogger("synapse_mcp")
     logger.info(f"Starting Synapse MCP server on {args.host}:{args.port}")
 
-    # Determine the path to the server.py file
-    # First check if it's in the current directory
-    if os.path.exists("server.py"):
-        server_path = "server.py"
-    else:
-        # Otherwise use the one from the package
-        package_dir = os.path.dirname(os.path.abspath(__file__))
-        server_path = os.path.join(os.path.dirname(package_dir), "server.py")
-    
-    # Import the server module
-    if os.path.exists(server_path):
-        spec = importlib.util.spec_from_file_location("server", server_path)
-        if spec and spec.loader:
-            server = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(server)
-            
-            # Run the server using uvicorn
-            try:
-                # Use uvicorn to run the FastAPI app
-                uvicorn.run(
-                    server.app,
-                    host=args.host,
-                    port=args.port,
-                    reload=args.debug
-                )
-                
-                logger.info("Server stopped")
-            except KeyboardInterrupt:
-                logger.info("Server stopped by user")
-            except Exception as e:
-                logger.error(f"Error running server: {e}")
-                sys.exit(1)
-        else:
-            logger.error(f"Failed to load server module from {server_path}")
-            sys.exit(1)
-    else:
-        logger.error(f"Server file not found at {server_path}")
+    # Initialize the MCP server
+    init_mcp(f"mcp://{args.host}:{args.port}")
+
+    # Run the server using uvicorn
+    try:
+        uvicorn.run(
+            server.app,
+            host=args.host,
+            port=args.port,
+            reload=args.debug
+        )
+        logger.info("Server stopped")
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user")
+    except Exception as e:
+        logger.error(f"Error running server: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

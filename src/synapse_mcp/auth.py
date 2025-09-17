@@ -9,14 +9,14 @@ class SynapseAuth:
     def __init__(self):
         self.synapse_client: Optional[synapseclient.Synapse] = None
         
-    def authenticate(self, auth_token: Optional[str] = None) -> None:
-        """Authenticate with Synapse using Auth Token."""
+    def authenticate(self, personal_access_token: Optional[str] = None) -> None:
+        """Authenticate with Synapse using a Personal Access Token."""
         # Create a new Synapse client instance and authenticate with token
         self.synapse_client = synapseclient.Synapse()
         
         try:
-            if auth_token:
-                self.synapse_client.login(authToken=auth_token)
+            if personal_access_token:
+                self.synapse_client.login(authToken=personal_access_token)
             else:
                 raise ValueError("Auth token must be provided")
         except ValueError as e:
@@ -54,10 +54,11 @@ class SynapseAuth:
             token_info = token_response.json()
             
             # Authenticate with the access token
-            self.authenticate(auth_token=token_info.get("access_token"))
+            self.authenticate(personal_access_token=token_info.get("access_token"))
             
             return {
                 "success": True,
+                "code": code,
                 "token_info": token_info,
                 "message": "Successfully authenticated with Synapse via OAuth2"
             }

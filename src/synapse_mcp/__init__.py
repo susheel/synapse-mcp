@@ -16,41 +16,72 @@ from .query import QueryBuilder
 from .utils import validate_synapse_id, format_annotations
 from .entities.croissant import convert_to_croissant
 
-# Create an MCP server with a placeholder URL
-# The actual URL will be set when the server is run
-mcp = FastMCP("Synapse MCP Server")
+
+# MCP server instance (to be initialized)
+mcp = None
+
+def init_mcp(server_url: str):
+    """Initialize the MCP server."""
+    global mcp
+    mcp = FastMCP("Synapse MCP Server", server_url=server_url)
 
 # Initialize authentication and entity operations
 auth_manager = SynapseAuth()
-entity_ops = {}
-query_builder = None
+
+# Initialize with a public (unauthenticated) client
+# This allows access to public resources without logging in
+try:
+    synapse_public_client = synapseclient.Synapse()
+    entity_ops = {
+        'base': BaseEntityOperations(synapse_public_client),
+        'project': ProjectOperations(synapse_public_client),
+        'folder': FolderOperations(synapse_public_client),
+        'file': FileOperations(synapse_public_client),
+        'table': TableOperations(synapse_public_client),
+        'dataset': DatasetOperations(synapse_public_client),
+    }
+    query_builder = QueryBuilder(synapse_public_client)
+except Exception:
+    entity_ops = {}
+    query_builder = None
+
+# Authentication Tool
+
+# Authentication Tool
 
 # Authentication Tool
 @mcp.tool()
-def authenticate(auth_token: Optional[str] = None, oauth_code: Optional[str] = None, redirect_uri: Optional[str] = None, client_id: Optional[str] = None, client_secret: Optional[str] = None) -> Dict[str, Any]:
-    """Authenticate with Synapse using Auth Token.
-    
+def authenticate(personal_access_token: Optional[str] = None, oauth_code: Optional[str] = None, redirect_uri: Optional[str] = None, client_id: Optional[str] = None, client_secret: Optional[str] = None) -> Dict[str, Any]:
+    """Authenticates with Synapse. Supports two distinct flows.
+
+    Provide `personal_access_token` for direct authentication.
+    Provide `oauth_code` and related params to complete an OAuth2 flow.
+
     Args:
-        auth_token: Synapse authentication token
-        
+        personal_access_token: A Synapse Personal Access Token for direct authentication.
+        oauth_code: An OAuth2 authorization code to be exchanged for an access token.
+
     Returns:
         Authentication result
     """
     global entity_ops, query_builder
     try:
-        # Authenticate with Synapse
         if oauth_code and redirect_uri and client_id and client_secret:
             # OAuth2 authentication
             result = auth_manager.authenticate_with_oauth(
-                code=oauth_code, redirect_uri=redirect_uri, 
+                code=oauth_code, redirect_uri=redirect_uri,
                 client_id=client_id, client_secret=client_secret
             )
-            if not result.get("success", False):
-                return result
-        
-        # Get the authenticated client
+            if result.get("success", False):
+                return result  # Return the full result on success
+        elif personal_access_token:
+            # Direct authentication with Personal Access Token
+            auth_manager.authenticate(personal_access_token=personal_access_token)
+        else:
+            return {'success': False, 'message': 'Authentication failed: No credentials provided.'}
+
         synapse_client = auth_manager.get_client()
-        
+
         # Initialize entity operations
         entity_ops = {
             'base': BaseEntityOperations(synapse_client),
@@ -76,6 +107,10 @@ def authenticate(auth_token: Optional[str] = None, oauth_code: Optional[str] = N
 
 @mcp.tool()
 def get_oauth_url(client_id: str, redirect_uri: str, scope: str = "view") -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get the OAuth2 authorization URL for Synapse.
     
     Args:
@@ -96,6 +131,10 @@ def get_oauth_url(client_id: str, redirect_uri: str, scope: str = "view") -> Dic
 # Entity Retrieval Tools
 @mcp.tool()
 def get_entity(entity_id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get a Synapse entity by ID.
     
     Args:
@@ -117,6 +156,10 @@ def get_entity(entity_id: str) -> Dict[str, Any]:
 
 @mcp.tool()
 def get_entity_annotations(entity_id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get annotations for an entity.
     
     Args:
@@ -139,6 +182,10 @@ def get_entity_annotations(entity_id: str) -> Dict[str, Any]:
 
 @mcp.tool()
 def get_entity_children(entity_id: str) -> List[Dict[str, Any]]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get child entities of a container entity.
     
     Args:
@@ -170,6 +217,10 @@ def get_entity_children(entity_id: str) -> List[Dict[str, Any]]:
 # Query Tools
 @mcp.tool()
 def search_entities(search_term: str, entity_type: Optional[str] = None, parent_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Search for Synapse entities.
     
     Args:
@@ -191,6 +242,10 @@ def search_entities(search_term: str, entity_type: Optional[str] = None, parent_
 @mcp.tool()
 def query_entities(entity_type: Optional[str] = None, parent_id: Optional[str] = None, 
                   name: Optional[str] = None, annotations: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Query entities based on various criteria.
     
     Args:
@@ -228,6 +283,10 @@ def query_entities(entity_type: Optional[str] = None, parent_id: Optional[str] =
 
 @mcp.tool()
 def query_table(table_id: str, query: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Query a Synapse table.
     
     Args:
@@ -250,6 +309,10 @@ def query_table(table_id: str, query: str) -> Dict[str, Any]:
 
 @mcp.tool()
 def get_datasets_as_croissant() -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get public datasets in Croissant metadata format.
     
     Returns:
@@ -287,6 +350,10 @@ def get_datasets_as_croissant() -> Dict[str, Any]:
 # Entity Resources
 @mcp.resource("entities/{id_or_name}")
 def get_entity_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get entity by ID or name."""
     # Check if it's a Synapse ID
     if validate_synapse_id(id_or_name):
@@ -299,27 +366,47 @@ def get_entity_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
 
 @mcp.resource("entities/{id}/annotations")
 def get_entity_annotations_resource(id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get entity annotations."""
     return get_entity_annotations(id)
 
 @mcp.resource("entities/{id}/children")
 def get_entity_children_resource(id: str) -> List[Dict[str, Any]]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get entity children."""
     return get_entity_children(id)
 
 @mcp.resource("entities/{entity_type}")
 def query_entities_by_type(entity_type: str) -> List[Dict[str, Any]]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Query entities by type."""
     return query_entities(entity_type=entity_type)
 
 @mcp.resource("entities/parent/{parent_id}")
 def query_entities_by_parent(parent_id: str) -> List[Dict[str, Any]]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Query entities by parent ID."""
     return query_entities(parent_id=parent_id)
 
 # Project Resources
 @mcp.resource("projects/{id_or_name}")
 def get_project_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get project by ID or name."""
     # Check if it's a Synapse ID
     if validate_synapse_id(id_or_name):
@@ -335,16 +422,28 @@ def get_project_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
 
 @mcp.resource("projects/{id}/annotations")
 def get_project_annotations(id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get project annotations."""
     return get_entity_annotations(id)
 
 @mcp.resource("projects/{id}/children")
 def get_project_children(id: str) -> List[Dict[str, Any]]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get project children."""
     return get_entity_children(id)
 
 @mcp.resource("projects/{id}/parent")
 def get_project_parent(id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get project parent."""
     # Projects don't have parents in Synapse
     return {'error': 'Projects do not have parents in Synapse'}
@@ -352,6 +451,10 @@ def get_project_parent(id: str) -> Dict[str, Any]:
 # Dataset Resources
 @mcp.resource("datasets/{id_or_name}")
 def get_dataset_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get dataset by ID or name."""
     # Similar implementation as projects but for datasets
     if validate_synapse_id(id_or_name):
@@ -367,16 +470,28 @@ def get_dataset_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
 
 @mcp.resource("datasets/{id}/annotations")
 def get_dataset_annotations(id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get dataset annotations."""
     return get_entity_annotations(id)
 
 @mcp.resource("datasets/{id}/children")
 def get_dataset_children(id: str) -> List[Dict[str, Any]]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get dataset children."""
     return get_entity_children(id)
 
 @mcp.resource("datasets/{id}/parent")
 def get_dataset_parent(id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get dataset parent."""
     entity = get_entity(id)
     return get_entity(entity.get('parentId')) if entity.get('parentId') else {'error': 'Dataset has no parent'}
@@ -384,6 +499,10 @@ def get_dataset_parent(id: str) -> Dict[str, Any]:
 # Folder Resources
 @mcp.resource("folders/{id_or_name}")
 def get_folder_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get folder by ID or name."""
     if validate_synapse_id(id_or_name):
         entity = get_entity(id_or_name)
@@ -398,16 +517,28 @@ def get_folder_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
 
 @mcp.resource("folders/{id}/annotations")
 def get_folder_annotations(id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get folder annotations."""
     return get_entity_annotations(id)
 
 @mcp.resource("folders/{id}/children")
 def get_folder_children(id: str) -> List[Dict[str, Any]]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get folder children."""
     return get_entity_children(id)
 
 @mcp.resource("folders/{id}/parent")
 def get_folder_parent(id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get folder parent."""
     entity = get_entity(id)
     return get_entity(entity.get('parentId')) if entity.get('parentId') else {'error': 'Folder has no parent'}
@@ -415,6 +546,10 @@ def get_folder_parent(id: str) -> Dict[str, Any]:
 # File Resources
 @mcp.resource("files/{id_or_name}")
 def get_file_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get file by ID or name."""
     if validate_synapse_id(id_or_name):
         entity = get_entity(id_or_name)
@@ -429,17 +564,29 @@ def get_file_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
 
 @mcp.resource("files/{id}/annotations")
 def get_file_annotations(id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get file annotations."""
     return get_entity_annotations(id)
 
 @mcp.resource("files/{id}/children")
 def get_file_children(id: str) -> List[Dict[str, Any]]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get file children."""
     # Files don't have children in Synapse
     return [{'error': 'Files do not have children in Synapse'}]
 
 @mcp.resource("files/{id}/parent")
 def get_file_parent(id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get file parent."""
     entity = get_entity(id)
     return get_entity(entity.get('parentId')) if entity.get('parentId') else {'error': 'File has no parent'}
@@ -447,6 +594,10 @@ def get_file_parent(id: str) -> Dict[str, Any]:
 # Table Resources
 @mcp.resource("tables/{id_or_name}")
 def get_table_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get table by ID or name."""
     if validate_synapse_id(id_or_name):
         entity = get_entity(id_or_name)
@@ -461,23 +612,39 @@ def get_table_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
 
 @mcp.resource("tables/{id}/annotations")
 def get_table_annotations(id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get table annotations."""
     return get_entity_annotations(id)
 
 @mcp.resource("tables/{id}/children")
 def get_table_children(id: str) -> List[Dict[str, Any]]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get table children."""
     # Tables don't have children in Synapse
     return [{'error': 'Tables do not have children in Synapse'}]
 
 @mcp.resource("tables/{id}/parent")
 def get_table_parent(id: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Get table parent."""
     entity = get_entity(id)
     return get_entity(entity.get('parentId')) if entity.get('parentId') else {'error': 'Table has no parent'}
 
 @mcp.resource("table/{id}/{query}")
 def query_table_resource(id: str, query: str) -> Dict[str, Any]:
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     """Query a table with SQL-like syntax."""
     # URL-decode the query string
     import urllib.parse
@@ -487,6 +654,10 @@ def query_table_resource(id: str, query: str) -> Dict[str, Any]:
 # Function to run the server
 def run_server(host: str = "127.0.0.1", port: int = 9000, server_url: Optional[str] = None):
     """Run the MCP server."""
+    # Ensure MCP is initialized
+    if mcp is None:
+        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
+
     # Determine the transport type based on environment variable
     # Use STDIO for local development and SSE for cloud deployment
     transport_env = os.environ.get("MCP_TRANSPORT", "stdio").lower()

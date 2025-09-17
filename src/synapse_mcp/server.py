@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import HTMLResponse
 
 # Import the MCP server
-from synapse_mcp import mcp, authenticate, get_oauth_url, get_entity, get_entity_annotations, get_entity_children, search_entities, get_datasets_as_croissant
+from synapse_mcp import mcp, init_mcp, authenticate, get_oauth_url, get_entity, get_entity_annotations, get_entity_children, search_entities, get_datasets_as_croissant
 from synapse_mcp import query_entities, query_table
 
 # Create FastAPI app for REST endpoints
@@ -33,7 +33,9 @@ app.add_middleware(
 )
 
 # In-memory session storage for OAuth flow
-# In production, use Redis or database
+# This is for demonstration purposes only. In a production environment,
+# this should be replaced with a more robust and scalable solution
+# such as Redis, a database, or a dedicated session management service.
 oauth_sessions = {}
 
 # Get the MCP streamable HTTP app and mount it at root
@@ -49,8 +51,8 @@ async def get_info():
     """Get server info."""
     return {
         "name": "Synapse MCP Server",
-        "url": os.environ.get("MCP_SERVER_URL", f"mcp://{os.environ.get('HOST', '127.0.0.1')}:{os.environ.get('PORT', '9000')}"),
-        "oauth_enabled": True,
+        "url": os.environ.get("MCP_SERVER_URL", f"mcp://{os.environ.get('HOST', '127.0.0.1')}:{os.environ.get('PORT', '9000')}") + "/mcp",
+        "oauth_enabled": False,
         "version": "0.1.0"
     }
 
@@ -318,12 +320,14 @@ async def oauth_callback(code: str, state: str = "", error: str = "", error_desc
 
     if auth_result.get("success", False):
         # Success: forward auth code/token to client
+        access_token = auth_result.get("access_token")
         callback_params = {
-            "code": code,  # Forward the code, or could be a token
+            "code": auth_result.get("code"), 
+            "access_token": access_token,
             "state": client_state
         }
     else:
-        # Error: forward error to client
+        # Error: forward error to the client
         callback_params = {
             "error": "authorization_failed",
             "error_description": auth_result.get("message", "Authentication failed"),
@@ -333,6 +337,8 @@ async def oauth_callback(code: str, state: str = "", error: str = "", error_desc
     # Build callback URL with parameters
     separator = "&" if "?" in client_callback_url else "?"
     callback_url = client_callback_url + separator + urllib.parse.urlencode(callback_params)
+    
+    oauth_sessions.pop(session_id, None)
 
     return RedirectResponse(url=callback_url)
 
@@ -566,6 +572,9 @@ def main():
     # Log server information
     logger = logging.getLogger("synapse_mcp")
     logger.info(f"Starting Synapse MCP server on {args.host}:{args.port}")
+    
+    # Initialize MCP server
+    init_mcp(server_url)
     
     # Run the server using uvicorn
     try:
