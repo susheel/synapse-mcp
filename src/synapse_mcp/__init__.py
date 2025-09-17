@@ -20,12 +20,9 @@ from .entities.croissant import convert_to_croissant
 # The actual URL will be updated before the server is run
 mcp = FastMCP("Synapse MCP Server")
 
-# Initialize authentication and entity operations
-auth_manager = SynapseAuth()
-auth_manager = SynapseAuth()
-
 # Initialize with a public (unauthenticated) client
 # This allows access to public resources without logging in
+try:
 try:
     synapse_public_client = synapseclient.Synapse()
     entity_ops = {
