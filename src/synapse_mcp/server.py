@@ -14,13 +14,13 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import HTMLResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from synapse_mcp import mcp, authenticate, get_oauth_url, get_entity, get_entity_annotations, get_entity_children, search_entities, get_datasets_as_croissant
 from synapse_mcp import query_entities, query_table
 
-# Create FastAPI app for REST endpoints
-app = FastAPI(title="Synapse MCP Server")
+# Get the Starlette app from the MCP server
+app = mcp.streamable_http_app()
 
 # Add CORS middleware
 app.add_middleware(
@@ -37,15 +37,8 @@ app.add_middleware(
 # such as Redis, a database, or a dedicated session management service.
 oauth_sessions = {}
 
-# Get the MCP streamable HTTP app and mount it at root
-mcp_app = mcp.streamable_http_app()
-
-# Replace the entire app with MCP app, but add our routes first
-from fastapi import Request as FastAPIRequest
-from starlette.middleware.base import BaseHTTPMiddleware
-
 # Server info endpoint
-@app.get("/info")
+@mcp.custom_route("/info", methods=["GET"])
 async def get_info():
     """Get server info."""
     return {
@@ -55,8 +48,7 @@ async def get_info():
         "version": "0.1.0"
     }
 
-# List tools endpoint
-@app.get("/tools")
+@mcp.custom_route("/tools", methods=["GET"])
 async def list_tools():
     """List available tools."""
     return [
@@ -99,8 +91,7 @@ async def list_tools():
         }
     ]
 
-# List resources endpoint
-@app.get("/resources")
+@mcp.custom_route("/resources", methods=["GET"])
 async def list_resources():
     """List available resources."""
     return [
@@ -210,21 +201,19 @@ async def list_resources():
         }
     ]
 
-# Tool endpoints
-@app.post("/tools/authenticate")
+@mcp.custom_route("/tools/authenticate", methods=["POST"])
 async def tool_authenticate(request: Request):
     """Authenticate with Synapse."""
     data = await request.json()
     return authenticate(**data)
 
-@app.post("/tools/get_oauth_url")
+@mcp.custom_route("/tools/get_oauth_url", methods=["POST"])
 async def tool_get_oauth_url(request: Request):
     """Get the OAuth2 authorization URL for Synapse."""
     data = await request.json()
     return get_oauth_url(**data)
 
-# OAuth2 endpoints
-@app.get("/authorize")
+@mcp.custom_route("/authorize", methods=["GET"])
 async def oauth_authorize(
     response_type: str,
     client_id: str,
@@ -271,7 +260,7 @@ async def oauth_authorize(
     oauth_sessions.pop(session_id, None)
     return {"error": result.get("message", "Failed to generate OAuth URL")}
 
-@app.get("/oauth/login")
+@mcp.custom_route("/oauth/login", methods=["GET"])
 async def oauth_login(client_id: str, redirect_uri: str, scope: str = "view"):
     """Redirect to Synapse OAuth2 login page."""
     result = get_oauth_url(client_id=client_id, redirect_uri=redirect_uri, scope=scope)
@@ -279,7 +268,7 @@ async def oauth_login(client_id: str, redirect_uri: str, scope: str = "view"):
         return RedirectResponse(url=result["auth_url"])
     return {"error": result.get("message", "Failed to generate OAuth URL")}
 
-@app.get("/oauth/callback")
+@mcp.custom_route("/oauth/callback", methods=["GET"])
 async def oauth_callback(code: str, state: str = "", error: str = "", error_description: str = ""):
     """Handle OAuth2 callback from Synapse and forward to client."""
     # Handle OAuth errors
@@ -341,206 +330,192 @@ async def oauth_callback(code: str, state: str = "", error: str = "", error_desc
 
     return RedirectResponse(url=callback_url)
 
-@app.post("/tools/get_entity")
+@mcp.custom_route("/tools/get_entity", methods=["POST"])
 async def tool_get_entity(request: Request):
     """Get an entity by ID."""
     data = await request.json()
     return get_entity(**data)
 
-@app.post("/tools/get_entity_annotations")
+@mcp.custom_route("/tools/get_entity_annotations", methods=["POST"])
 async def tool_get_entity_annotations(request: Request):
     """Get annotations for an entity."""
     data = await request.json()
     return get_entity_annotations(**data)
 
-@app.post("/tools/get_entity_children")
+@mcp.custom_route("/tools/get_entity_children", methods=["POST"])
 async def tool_get_entity_children(request: Request):
     """Get child entities of a container entity."""
     data = await request.json()
     return get_entity_children(**data)
 
-@app.post("/tools/search_entities")
+@mcp.custom_route("/tools/search_entities", methods=["POST"])
 async def tool_search_entities(request: Request):
     """Search for Synapse entities."""
     data = await request.json()
     return search_entities(**data)
 
 
-@app.post("/tools/query_entities")
+@mcp.custom_route("/tools/query_entities", methods=["POST"])
 async def tool_query_entities(request: Request):
     """Query entities based on various criteria."""
     data = await request.json()
     return query_entities(**data)
 
-@app.post("/tools/query_table")
+@mcp.custom_route("/tools/query_table", methods=["POST"])
 async def tool_query_table(request: Request):
     """Query a Synapse table."""
     data = await request.json()
     return query_table(**data)
 
-@app.post("/tools/get_datasets_as_croissant")
+@mcp.custom_route("/tools/get_datasets_as_croissant", methods=["POST"])
 async def tool_get_datasets_as_croissant(request: Request):
     """Get public datasets in Croissant metadata format."""
     data = await request.json()
     return get_datasets_as_croissant(**data)
 
 # Resource endpoints
-@app.get("/resources/entities/{id_or_name}")
+@mcp.custom_route("/resources/entities/{id_or_name}", methods=["GET"])
 async def resource_get_entity(id_or_name: str):
     """Get entity by ID or name."""
     from synapse_mcp import get_entity_by_id_or_name
     return get_entity_by_id_or_name(id_or_name)
 
-@app.get("/resources/entities/{id}/annotations")
+@mcp.custom_route("/resources/entities/{id}/annotations", methods=["GET"])
 async def resource_get_entity_annotations(id: str):
     """Get entity annotations."""
     return get_entity_annotations(entity_id=id)
 
-@app.get("/resources/entities/{id}/children")
+@mcp.custom_route("/resources/entities/{id}/children", methods=["GET"])
 async def resource_get_entity_children(id: str):
     """Get entity children."""
-    return get_entity_children(entity_id=id)
+    return get_entity_children(entity_id=id)    
 
-@app.get("/resources/entities/{entity_type}")
+@mcp.custom_route("/resources/entities/{entity_type}", methods=["GET"])
 async def resource_query_entities_by_type(entity_type: str):
     """Query entities by type."""
     return query_entities(entity_type=entity_type)
 
-@app.get("/resources/entities/parent/{parent_id}")
+@mcp.custom_route("/resources/entities/parent/{parent_id}", methods=["GET"])
 async def resource_query_entities_by_parent(parent_id: str):
     """Query entities by parent ID."""
     return query_entities(parent_id=parent_id)
 
 # Project resources
-@app.get("/resources/projects/{id_or_name}")
+@mcp.custom_route("/resources/projects/{id_or_name}", methods=["GET"])
 async def resource_get_project(id_or_name: str):
     """Get project by ID or name."""
     from synapse_mcp import get_project_by_id_or_name
     return get_project_by_id_or_name(id_or_name)
 
-@app.get("/resources/projects/{id}/annotations")
+@mcp.custom_route("/resources/projects/{id}/annotations", methods=["GET"])
 async def resource_get_project_annotations(id: str):
     """Get project annotations."""
     return get_entity_annotations(entity_id=id)
 
-@app.get("/resources/projects/{id}/children")
+@mcp.custom_route("/resources/projects/{id}/children", methods=["GET"])
 async def resource_get_project_children(id: str):
     """Get project children."""
     return get_entity_children(entity_id=id)
 
-@app.get("/resources/projects/{id}/parent")
+@mcp.custom_route("/resources/projects/{id}/parent", methods=["GET"])
 async def resource_get_project_parent(id: str):
     """Get project parent."""
     from synapse_mcp import get_project_parent
     return get_project_parent(id)
 
 # Dataset resources
-@app.get("/resources/datasets/{id_or_name}")
+@mcp.custom_route("/resources/datasets/{id_or_name}", methods=["GET"])
 async def resource_get_dataset(id_or_name: str):
     """Get dataset by ID or name."""
     from synapse_mcp import get_dataset_by_id_or_name
     return get_dataset_by_id_or_name(id_or_name)
 
-@app.get("/resources/datasets/{id}/annotations")
+@mcp.custom_route("/resources/datasets/{id}/annotations", methods=["GET"])
 async def resource_get_dataset_annotations(id: str):
-    """Get dataset annotations."""
+    """Get dataset annotations."""    
     return get_entity_annotations(entity_id=id)
 
-@app.get("/resources/datasets/{id}/children")
+@mcp.custom_route("/resources/datasets/{id}/children", methods=["GET"])
 async def resource_get_dataset_children(id: str):
     """Get dataset children."""
     return get_entity_children(entity_id=id)
 
-@app.get("/resources/datasets/{id}/parent")
+@mcp.custom_route("/resources/datasets/{id}/parent", methods=["GET"])
 async def resource_get_dataset_parent(id: str):
     """Get dataset parent."""
     from synapse_mcp import get_dataset_parent
     return get_dataset_parent(id)
 
 # Folder resources
-@app.get("/resources/folders/{id_or_name}")
+@mcp.custom_route("/resources/folders/{id_or_name}", methods=["GET"])
 async def resource_get_folder(id_or_name: str):
     """Get folder by ID or name."""
     from synapse_mcp import get_folder_by_id_or_name
     return get_folder_by_id_or_name(id_or_name)
 
-@app.get("/resources/folders/{id}/annotations")
+@mcp.custom_route("/resources/folders/{id}/annotations", methods=["GET"])
 async def resource_get_folder_annotations(id: str):
     """Get folder annotations."""
     return get_entity_annotations(entity_id=id)
 
-@app.get("/resources/folders/{id}/children")
+@mcp.custom_route("/resources/folders/{id}/children", methods=["GET"])
 async def resource_get_folder_children(id: str):
     """Get folder children."""
     return get_entity_children(entity_id=id)
 
-@app.get("/resources/folders/{id}/parent")
+@mcp.custom_route("/resources/folders/{id}/parent", methods=["GET"])
 async def resource_get_folder_parent(id: str):
     """Get folder parent."""
     from synapse_mcp import get_folder_parent
     return get_folder_parent(id)
 
 # File resources
-@app.get("/resources/files/{id_or_name}")
+@mcp.custom_route("/resources/files/{id_or_name}", methods=["GET"])
 async def resource_get_file(id_or_name: str):
     """Get file by ID or name."""
     from synapse_mcp import get_file_by_id_or_name
     return get_file_by_id_or_name(id_or_name)
 
-@app.get("/resources/files/{id}/annotations")
+@mcp.custom_route("/resources/files/{id}/annotations", methods=["GET"])
 async def resource_get_file_annotations(id: str):
     """Get file annotations."""
     return get_entity_annotations(entity_id=id)
 
-@app.get("/resources/files/{id}/children")
+@mcp.custom_route("/resources/files/{id}/children", methods=["GET"])
 async def resource_get_file_children(id: str):
     """Get file children."""
     from synapse_mcp import get_file_children
     return get_file_children(id)
 
-@app.get("/resources/files/{id}/parent")
+@mcp.custom_route("/resources/files/{id}/parent", methods=["GET"])
 async def resource_get_file_parent(id: str):
     """Get file parent."""
     from synapse_mcp import get_file_parent
     return get_file_parent(id)
 
 # Table resources
-@app.get("/resources/tables/{id_or_name}")
+@mcp.custom_route("/resources/tables/{id_or_name}", methods=["GET"])
 async def resource_get_table(id_or_name: str):
     """Get table by ID or name."""
     from synapse_mcp import get_table_by_id_or_name
     return get_table_by_id_or_name(id_or_name)
 
-@app.get("/resources/tables/{id}/annotations")
+@mcp.custom_route("/resources/tables/{id}/annotations", methods=["GET"])
 async def resource_get_table_annotations(id: str):
     """Get table annotations."""
     return get_entity_annotations(entity_id=id)
 
-@app.get("/resources/tables/{id}/children")
+@mcp.custom_route("/resources/tables/{id}/children", methods=["GET"])
 async def resource_get_table_children(id: str):
     """Get table children."""
     from synapse_mcp import get_table_children
     return get_table_children(id)
 
-@app.get("/resources/tables/{id}/parent")
+@mcp.custom_route("/resources/tables/{id}/parent", methods=["GET"])
 async def resource_get_table_parent(id: str):
-    """Get table parent."""
+    """Get table parent."""    
     from synapse_mcp import get_table_parent
     return get_table_parent(id)
-
-@app.get("/resources/query/table/{id}/{query}")
-async def resource_query_table(id: str, query: str):
-    """Query a table with SQL-like syntax."""
-    return query_table(table_id=id, query=query)
-
-@app.get("/resources/croissant/datasets")
-async def resource_get_datasets_as_croissant():
-    """Get public datasets in Croissant metadata format."""
-    return get_datasets_as_croissant()
-
-# Mount MCP app to handle streamable HTTP at /mcp
-app.mount("/mcp", mcp_app)
-    
 def main():
     """Run the Synapse MCP server."""
     parser = argparse.ArgumentParser(description="Run the Synapse MCP server")
@@ -548,6 +523,7 @@ def main():
     parser.add_argument("--port", type=int, default=9000, help="Port to listen on")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--server-url", help="Public URL of the server (for OAuth2 redirect)")
+    parser.add_argument("--personal-access-token", help="Synapse Personal Access Token for pre-authentication")
     args = parser.parse_args()
     
     # Configure logging
@@ -571,6 +547,16 @@ def main():
     # Log server information
     logger = logging.getLogger("synapse_mcp")
     logger.info(f"Starting Synapse MCP server on {args.host}:{args.port}")
+
+    # Pre-authenticate if a Personal Access Token is provided
+    pat = args.personal_access_token or os.environ.get("SYNAPSE_PERSONAL_ACCESS_TOKEN")
+    if pat:
+        logger.info("Attempting pre-authentication with Personal Access Token.")
+        auth_result = authenticate(personal_access_token=pat)
+        if auth_result.get("success"):
+            logger.info("Successfully pre-authenticated with Synapse.")
+        else:
+            logger.error(f"Failed to pre-authenticate: {auth_result.get('message')}")
     
     # Set the server URL
     mcp.server_url = server_url

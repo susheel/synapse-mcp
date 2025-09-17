@@ -36,7 +36,7 @@ def main():
     # Run the server using uvicorn
     try:
         uvicorn.run(
-            server.app,
+            "synapse_mcp.server:app",
             host=args.host,
             port=args.port,
             reload=args.debug

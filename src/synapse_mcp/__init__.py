@@ -41,7 +41,8 @@ except Exception:
 
 # Authentication Tool
 @mcp.tool()
-def authenticate(personal_access_token: Optional[str] = None, oauth_code: Optional[str] = None, redirect_uri: Optional[str] = None, client_id: Optional[str] = None, client_secret: Optional[str] = None) -> Dict[str, Any]:
+def authenticate(personal_access_token: Optional[str] = None, 
+                 oauth_code: Optional[str] = None, redirect_uri: Optional[str] = None, client_id: Optional[str] = None, client_secret: Optional[str] = None) -> Dict[str, Any]:
     """Authenticates with Synapse. Supports two distinct flows.
 
     Provide `personal_access_token` for direct authentication.
@@ -209,14 +210,14 @@ def search_entities(search_term: str, entity_type: Optional[str] = None, parent_
 
 @mcp.tool()
 def query_entities(entity_type: Optional[str] = None, parent_id: Optional[str] = None, 
-                  name: Optional[str] = None, annotations: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+                  name: Optional[str] = None, annotations: Optional[str] = None) -> List[Dict[str, Any]]:
     """Query entities based on various criteria.
     
     Args:
         entity_type: Type of entity to query (project, folder, file, table, dataset)
         parent_id: Parent entity ID to filter by
         name: Entity name to filter by
-        annotations: Annotations to filter by
+        annotations: Annotations to filter by (as a JSON string)
         
     Returns:
         List of entities matching the query
@@ -228,6 +229,7 @@ def query_entities(entity_type: Optional[str] = None, parent_id: Optional[str] =
         return [{'error': 'Query builder not initialized'}]
     
     try:
+        import json
         # Build query parameters
         params = {}
         if entity_type:
@@ -237,7 +239,7 @@ def query_entities(entity_type: Optional[str] = None, parent_id: Optional[str] =
         if name:
             params['name'] = name
         if annotations:
-            params['annotations'] = annotations
+            params['annotations'] = json.loads(annotations)
         
         # Build and execute query
         query = query_builder.build_combined_query(params)
