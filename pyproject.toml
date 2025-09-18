@@ -6,9 +6,11 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Sage Bionetworks", email = "susheel.varma@sagebase.org"}
+    {name = "Sage Bionetworks", email = "synapseinfo@sagebase.org"},
+    {name = "Susheel Varma", email = "susheel.varma@sagebase.org"},
+    {name = "Anh Nguyet Vu", email = "anh.nguyet.vu@sagebase.org"}
 ]
-keywords = ["synapse", "mcp", "croissant", "metadata", "bioinformatics"]
+keywords = ["synapse", "mcp", "metadata", "bioinformatics"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -22,13 +24,15 @@ dependencies = [
     "mcp[cli]>=1.3.0",
     "requests>=2.32.3",
     "synapseclient>=4.7.0",
+    "Authlib[starlette]>=1.3.1",
+    "pandas>=1.5.0",
     "fastapi>=0.110.0",
     "uvicorn>=0.27.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/SageBionetworks/synapse-mcp"
-Issues = "https://github.com/SageBionetworks/synapse-mcp/issues"
+Homepage = "https://github.com/Sage-Bionetworks/synapse-mcp"
+Issues = "https://github.com/Sage-Bionetworks/synapse-mcp/issues"
 
 [project.scripts]
 synapse-mcp = "synapse_mcp.__main__:main"

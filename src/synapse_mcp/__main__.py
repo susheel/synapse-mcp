@@ -30,8 +30,10 @@ def main():
     logger.info(f"Starting Synapse MCP server on {args.host}:{args.port}")
 
     # Set the server URL
-    server_url = os.environ.get("MCP_SERVER_URL", f"mcp://{args.host}:{args.port}")
-    mcp.server_url = server_url
+    server_url = os.environ.get("MCP_SERVER_URL", f"http://{args.host}:{args.port}")
+
+    # This must be done before the app is run
+    server.pat_auth_manager.initialize_pat_auth()
 
     # Run the server using uvicorn
     try:

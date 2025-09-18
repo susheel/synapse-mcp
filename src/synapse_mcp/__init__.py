@@ -2,8 +2,6 @@ from mcp.server.fastmcp import FastMCP
 from typing import Dict, List, Any, Optional, Union
 import synapseclient
 import os
-
-from .auth import SynapseAuth
 from .entities import (
     BaseEntityOperations,
     ProjectOperations,
@@ -20,127 +18,23 @@ from .entities.croissant import convert_to_croissant
 # The actual URL will be updated before the server is run
 mcp = FastMCP("Synapse MCP Server")
 
-# Initialize authentication manager and try pre-authentication
-auth_manager = SynapseAuth()
+# A single Synapse client instance is used by all operations.
+# Authentication is handled by the middleware in server.py and auth_server.py,
+# which can dynamically provide credentials to this client instance as needed,
+# particularly in the context of a request. For PAT-based auth, the client
+# is configured at startup.
+synapse_client = synapseclient.Synapse()
 
-def initialize_synapse_client():
-    """Initialize Synapse client with optional pre-authentication."""
-    global entity_ops, query_builder
-
-    # Try pre-authentication with environment variable
-    pat = os.environ.get("SYNAPSE_PAT")
-    synapse_client = None
-
-    if pat:
-        try:
-            auth_manager.authenticate(personal_access_token=pat)
-            synapse_client = auth_manager.get_client()
-            print("Successfully pre-authenticated with Synapse using SYNAPSE_PAT")
-        except Exception as e:
-            print(f"Failed to pre-authenticate: {e}")
-
-    # Fall back to public client if no pre-auth or if pre-auth failed
-    if not synapse_client:
-        try:
-            synapse_client = synapseclient.Synapse()
-            print("Using public (unauthenticated) Synapse client")
-        except Exception as e:
-            print(f"Failed to create public client: {e}")
-            entity_ops = {}
-            query_builder = None
-            return
-
-    # Initialize entity operations with the client
-    try:
-        entity_ops = {
-            'base': BaseEntityOperations(synapse_client),
-            'project': ProjectOperations(synapse_client),
-            'folder': FolderOperations(synapse_client),
-            'file': FileOperations(synapse_client),
-            'table': TableOperations(synapse_client),
-            'dataset': DatasetOperations(synapse_client),
-        }
-        query_builder = QueryBuilder(synapse_client)
-    except Exception as e:
-        print(f"Failed to initialize entity operations: {e}")
-        entity_ops = {}
-        query_builder = None
-
-# Initialize the client on module load
-initialize_synapse_client()
-
-# Internal authentication function (not exposed as MCP tool)
-def authenticate(personal_access_token: Optional[str] = None,
-                 oauth_code: Optional[str] = None, redirect_uri: Optional[str] = None, client_id: Optional[str] = None, client_secret: Optional[str] = None) -> Dict[str, Any]:
-    """Authenticates with Synapse. Supports two distinct flows.
-
-    Provide `personal_access_token` for direct authentication.
-    Provide `oauth_code` and related params to complete an OAuth2 flow.
-
-    Args:
-        personal_access_token: A Synapse Personal Access Token for direct authentication.
-        oauth_code: An OAuth2 authorization code to be exchanged for an access token.
-
-    Returns:
-        Authentication result
-    """
-    global entity_ops, query_builder
-    try:
-        if oauth_code and redirect_uri and client_id and client_secret:
-            # OAuth2 authentication
-            result = auth_manager.authenticate_with_oauth(
-                code=oauth_code, redirect_uri=redirect_uri,
-                client_id=client_id, client_secret=client_secret
-            )
-            if result.get("success", False):
-                return result  # Return the full result on success
-        elif personal_access_token:
-            # Direct authentication with Personal Access Token
-            auth_manager.authenticate(personal_access_token=personal_access_token)
-        else:
-            return {'success': False, 'message': 'Authentication failed: No credentials provided.'}
-        synapse_client = auth_manager.get_client()
-        # Initialize entity operations
-        entity_ops = {
-            'base': BaseEntityOperations(synapse_client),
-            'project': ProjectOperations(synapse_client),
-            'folder': FolderOperations(synapse_client),
-            'file': FileOperations(synapse_client),
-            'table': TableOperations(synapse_client),
-            'dataset': DatasetOperations(synapse_client),
-        }
-        
-        # Initialize query builder
-        query_builder = QueryBuilder(synapse_client)
-        
-        return {
-            'success': True,
-            'message': 'Successfully authenticated with Synapse'
-        }
-    except Exception as e:
-        return {
-            'success': False,
-            'message': f'Authentication failed: {str(e)}'
-        }
-
-# Internal function for OAuth URL generation (not exposed as MCP tool)
-def get_oauth_url(client_id: str, redirect_uri: str, scope: str = "view") -> Dict[str, Any]:
-    """Get the OAuth2 authorization URL for Synapse.
-
-    Args:
-        client_id: OAuth2 client ID
-        redirect_uri: Redirect URI for the OAuth2 flow
-        scope: OAuth2 scope (default: "view")
-
-    Returns:
-        The OAuth2 authorization URL
-    """
-    try:
-        auth_url = auth_manager.get_oauth_url(client_id, redirect_uri, scope)
-        return {"success": True, "auth_url": auth_url}
-    except Exception as e:
-        return {"success": False, "message": f"Failed to generate OAuth URL: {str(e)}"}
-
+# Initialize entity operations and query builder with the client instance
+entity_ops = {
+    'base': BaseEntityOperations(synapse_client),
+    'project': ProjectOperations(synapse_client),
+    'folder': FolderOperations(synapse_client),
+    'file': FileOperations(synapse_client),
+    'table': TableOperations(synapse_client),
+    'dataset': DatasetOperations(synapse_client),
+}
+query_builder = QueryBuilder(synapse_client)
 
 # Entity Retrieval Tools
 @mcp.tool()
@@ -153,9 +47,6 @@ def get_entity(entity_id: str) -> Dict[str, Any]:
     Returns:
         The entity as a dictionary
     """
-    # Public entities don't require authentication
-    # Private entities will be handled by the Synapse client
-    
     if not validate_synapse_id(entity_id):
         return {'error': f'Invalid Synapse ID: {entity_id}'}
     
@@ -174,9 +65,6 @@ def get_entity_annotations(entity_id: str) -> Dict[str, Any]:
     Returns:
         The entity annotations as a dictionary
     """
-    # Public entities don't require authentication
-    # Private entities will be handled by the Synapse client
-    
     if not validate_synapse_id(entity_id):
         return {'error': f'Invalid Synapse ID: {entity_id}'}
     
@@ -196,9 +84,6 @@ def get_entity_children(entity_id: str) -> List[Dict[str, Any]]:
     Returns:
         List of child entities
     """
-    # Public entities don't require authentication
-    # Private entities will be handled by the Synapse client
-    
     if not validate_synapse_id(entity_id):
         return [{'error': f'Invalid Synapse ID: {entity_id}'}]
     
@@ -251,9 +136,6 @@ def query_entities(entity_type: Optional[str] = None, parent_id: Optional[str] =
     Returns:
         List of entities matching the query
     """
-    # Public entities don't require authentication
-    # Private entities will be handled by the Synapse client
-    
     if not query_builder:
         return [{'error': 'Query builder not initialized'}]
     
@@ -287,9 +169,6 @@ def query_table(table_id: str, query: str) -> Dict[str, Any]:
     Returns:
         Query results
     """
-    # Public tables don't require authentication
-    # Private tables will be handled by the Synapse client
-    
     if not validate_synapse_id(table_id):
         return {'error': f'Invalid Synapse ID: {table_id}'}
     
@@ -305,33 +184,11 @@ def get_datasets_as_croissant() -> Dict[str, Any]:
     Returns:
         Datasets in Croissant metadata format
     """
-    try:
-        # Query the public datasets table
-        table_id = "syn61609402"  # The specific table ID for public datasets
-
-        # Try to query the actual table if authenticated
-        if auth_manager.is_authenticated():
-            query_result = query_table(table_id, "SELECT * FROM syn61609402")
-            if 'error' not in query_result:
-                # Convert to Croissant format
-                return convert_to_croissant(query_result)
-
-        # If not authenticated or query failed, return sample data
-        # This allows the API to work without authentication for demo purposes
-        sample_data = {
-            'headers': ['id', 'title', 'description', 'diseaseFocus', 'dataType', 'yearProcessed', 'fundingAgency'],
-            'data': [
-                ['syn12345678', 'Sample Dataset', 'A sample dataset for demonstration', 'Neuroscience', 'Genomics', '2023', 'NIH'],
-                ['syn87654321', 'Another Dataset', 'Another sample dataset', 'Cancer', 'Proteomics', '2024', 'NCI']
-            ]
-        }
-        
-        # Convert to Croissant format
-        croissant_data = convert_to_croissant(sample_data)
-        
-        return croissant_data
-    except Exception as e:
-        return {'error': str(e), 'message': 'Failed to convert datasets to Croissant format'}
+    table_id = "syn61609402"
+    query_result = query_table(table_id, f"SELECT * FROM {table_id}")
+    if 'error' in query_result:
+        return query_result
+    return convert_to_croissant(query_result)
 
 
 # Entity Resources
