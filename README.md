@@ -156,9 +156,9 @@ response = requests.post("http://127.0.0.1:9000/tools/authenticate", json={
 result = response.json()
 print(result)
 
-# Alternatively, you can authenticate with an API key
+# Alternatively, you can authenticate with an auth token
 response = requests.post("http://127.0.0.1:9000/tools/authenticate", json={
-    "api_key": "your-synapse-api-key"
+    "auth_token": "your-synapse-auth-token"
 })
 ```
 
