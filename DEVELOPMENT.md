@@ -4,7 +4,7 @@ This guide provides instructions for setting up and running the Synapse MCP serv
 
 ## Local Development Setup
 
-To set up the server for local development, espcially to contribute to the project, follow these steps to install in editable mode.
+To set up the server for local development, especially to contribute to the project, follow these steps to install in editable mode.
 
 ```bash
 # 1. Clone the repository
@@ -23,23 +23,13 @@ This command uses the `-e` flag to install the package in "editable" mode, meani
 
 ## Running the Server Locally
 
-### Without Authentication
-
-With local MCP servers, authentication can be optional. 
-You can search for data and retrieve certain resources on Synapse without providing Synapse account credentials. 
-
-Run the server using the `synapse-mcp` command. 
-For development, it is highly recommended to run the server in debug mode to see logs. 
-
-```bash
-synapse-mcp --host 127.0.0.1 --port 9000 --debug
-```
+The server supports two main authentication modes for development: with a Personal Access Token (PAT) for ease of local use, and with the full OAuth2 flow for testing the complete, spec-compliant authorization process. Using debug mode is recommended to see detailed logs.
 
 ### With Authentication
 
 #### Method 1: Authentication with Personal Auth Token
 
-Just make sure server is started with Synapse Personal Access Token.
+For the simplest setup, you can run the server using a Synapse Personal Access Token (PAT). The server will automatically detect the `SYNAPSE_PAT` environment variable and use it to authenticate all requests, bypassing the OAuth flow.
 ```bash
 export SYNAPSE_PAT="YOUR_TOKEN_HERE"
 synapse-mcp --host 127.0.0.1 --port 9000 --debug
@@ -61,6 +51,11 @@ export SYNAPSE_OAUTH_REDIRECT_URI="http://127.0.0.1:9000/oauth/callback"
 synapse-mcp --host 127.0.0.1 --port 9000 --debug
 ```
 
+##### Adding to client
+
+http://127.0.0.1:9000/mcp
+
+
 ## Running Tests
 
 To run the test suite, use `pytest`:
@@ -81,8 +76,13 @@ Build and run the server using Docker.
 docker build -t synapse-mcp .
 
 # Run the container
-docker run -p 9000:9000 -e SYNAPSE_OAUTH_CLIENT_ID=your_client_id -e SYNAPSE_OAUTH_CLIENT_SECRET=your_client_secret -e SYNAPSE_OAUTH_REDIRECT_URI=your_redirect_uri synapse-mcp
-docker run -p 9000:9000 -e MCP_TRANSPORT=sse -e MCP_SERVER_URL=mcp://your-domain:9000 synapse-mcp
+docker run -p 9000:9000 \
+  -e SYNAPSE_OAUTH_CLIENT_ID="your_client_id" \
+  -e SYNAPSE_OAUTH_CLIENT_SECRET="your_client_secret" \
+  -e SYNAPSE_OAUTH_REDIRECT_URI="http://localhost:9000/oauth/callback" \
+  -e MCP_SERVER_URL="mcp://your-domain:9000" \
+  -e MCP_TRANSPORT="sse" \
+  synapse-mcp
 ```
 
 ### Fly.io

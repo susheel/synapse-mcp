@@ -1,12 +1,8 @@
 # Synapse MCP Server
 
-A Model Context Protocol (MCP) server that exposes Synapse Entities (Datasets, Projects, Folders, Files, Tables) with their annotations and supports OAuth2 authentication.
+A Model Context Protocol (MCP) server that enables AI agent access to Synapse entities (Datasets, Projects, Folders, Files, Tables, and more).
 
-## Overview
-
-This server provides a RESTful API for accessing Synapse entities and their annotations through the Model Context Protocol (MCP). It allows you to:
-
-- Authenticate with Synapse
+You (your AI agent) can:
 - Retrieve entities by ID
 - Retrieve entities by name
 - Get entity annotations
@@ -17,94 +13,84 @@ This server provides a RESTful API for accessing Synapse entities and their anno
 
 ## Usage
 
-Below shows the simplest setup options for you to get started with the Synapse MCP server as a research/scientific user. 
-For contributor-centric installation, please see DEVELOPMENT.md.
+This guide provides typical user instructions for connecting to the Synapse MCP server. For contributor setup, please see [DEVELOPMENT.md](./DEVELOPMENT.md).
 
-### Local Server Usage
+### Authentication
 
-#### Install Python Package
+The Synapse MCP server supports two authentication methods:
 
-```
+1.  **OAuth2 (Default):** This is the primary and recommended authentication method. It provides a secure, browser-based login flow. When your AI agent needs to access protected resources, it will prompt you to log in to Synapse in your browser. This method is used by default for both local and remote servers.
+
+2.  **Personal Access Token (PAT):** This method is available for local development or in environments where a browser-based login is not feasible. It requires you to provide a Synapse Personal Access Token to the server.
+
+### Connecting to the Server
+
+#### Remote Server (Beta)
+
+You can connect to our deployed remote server, which skips the need for local installation. Authentication is handled via the default OAuth2 flow.
+
+**Configure Your AI Client:**
+
+*   *Claude Code:**
+    ```bash
+    # Add the remote server
+    claude mcp add --transport http synapse -- https://synapse-mcp.fly.dev/mcp
+    ```
+    When you attempt to access a private Synapse resource, the client will automatically guide you through the browser login process.
+
+#### Local Server
+
+For development or console-only use, you can run the server on your local machine.
+
+**1. Install the Package:**
+```bash
 pip install synapse-mcp
 ```
 
-#### Understand Authenticated vs. Non-Authenticated Usage
+**2. Run the Server:**
 
-With local MCP servers, authentication can be optional. 
-You can search for resources on Synapse and download a limited subset without providing Synapse account credentials. 
+*   **For OAuth2 (Default):** Simply start the server.
+    ```bash
+    synapse-mcp --port 9000
+    ```
 
-But we recommend you create a Synapse account if you don't already have one and provide a Personal Access Token (PAT) for authenticated local usage. 
-The PAT can be generated from your account settings. 
-This allows your AI agent to access much more, including any private data that is shared with you. 
-In non-authenticated usage, your agent will say that it can't access resources because you are logged in. 
-See below for how to provide authentication when configure your client.
+*   **For Personal Access Token (PAT):** For using PAT, first generate one from your Synapse account settings. Then, start the server with the `SYNAPSE_PAT` environment variable set.
+    ```bash
+    export SYNAPSE_PAT="YOUR_TOKEN_HERE"
+    synapse-mcps
+    ```
 
-### Configure Your AI Client of Choice
+**3. Configure Your AI Client:**
 
-Configuration instructions shown below for some popular clients.
+*   **Claude Code:**
+    ```bash
+    # Add your local server (ensure you use the full URL)
+    claude mcp add --transport http synapse -- http://127.0.0.1:9000
+    ```
 
-#### Claude Desktop
+*   **Claude Desktop (Using PAT):** If you are using PAT authentication with the local server, you can configure Claude Desktop to pass the token.
+    1.  Open Claude Desktop Settings > Developer > Edit Config.
+    2.  Add the following to `mcpServers`:
+        ```json
+        "synapse": {
+          "command": "synapse-mcp",
+          "env": {
+            "SYNAPSE_PAT": "YOUR_TOKEN_HERE"
+          }
+        }
+        ```
+    3.  Save the file and restart Claude Desktop.
 
-- Open Claude Desktop
-- Click on the Claude menu and select "Settings..."
-- Click on "Developer" in the left-hand bar
-- Click on "Edit Config"
-- Add the following configuration to the `mcpServers` section:
+### Example Prompts
 
-```json
-"synapse": {
-  "command": "synapse-mcp",
-  "env": {
-    "SYNAPSE_PAT": "YOUR_TOKEN_HERE"
-  }
-}
-```
-- Save the configuration file and restart Claude Desktop
-
-Behind the scenes, Claude Desktops starts the server at default ports with the command:
-
-```bash
-synapse-mcp
-```
-
-#### Claude Code
-
-Here, we provide `--env SYNAPSE_PAT` for authenticated use.
-
-`claude mcp add synapse --env SYNAPSE_PAT=$SYNAPSE_AUTH_TOKEN -- synapse-mcp`
-
-
-#### Others
-
-TBD
-
-
-### Remote Server Usage (Beta)
-
-You can connect to our deployed remote server, skipping the installation step. 
-However, remote server requires authentication through OAuth2 flow, so it is presumed you have a Synapse account that you can log into. 
-Your browser will be redirected to Synapse.org to grant access to your client. 
-
-### Configure Your AI Client of Choice
-
-#### Claude Code
-
-TODO
-
-#### codename Goose
-
-TODO
-
-#### Example Prompts
-
-You can now use Synapse data in your conversations with Claude. For example:
-- "Get the entity with ID syn123456 from Synapse"
+Once connected, you can use Synapse data in your conversations:
+- "Create a chart from the data in Synapse table syn123456"
 - "Query all files in the Synapse project syn123456"
 - "Get annotations for the Synapse entity syn123456"
 
 ## Contributing
 
-Contributions are welcome! For instructions on how to set up a local development environment, run tests, and test the OAuth flow, please see our [Development Guide](./DEVELOPMENT.md).
+Contributions are welcome! Please see our [Development Guide](./DEVELOPMENT.md) for instructions on setting up a development environment, running tests, and more.
 
 ## License
 
