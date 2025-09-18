@@ -20,28 +20,57 @@ from .entities.croissant import convert_to_croissant
 # The actual URL will be updated before the server is run
 mcp = FastMCP("Synapse MCP Server")
 
-# Initialize with a public (unauthenticated) client
-# This allows access to public resources without logging in
-# This allows access to public resources without logging in
+# Initialize authentication manager and try pre-authentication
 auth_manager = SynapseAuth()
-try:
-    synapse_public_client = synapseclient.Synapse()
-    entity_ops = {
-        'base': BaseEntityOperations(synapse_public_client),
-        'project': ProjectOperations(synapse_public_client),
-        'folder': FolderOperations(synapse_public_client),
-        'file': FileOperations(synapse_public_client),
-        'table': TableOperations(synapse_public_client),
-        'dataset': DatasetOperations(synapse_public_client),
-    }
-    query_builder = QueryBuilder(synapse_public_client)
-except Exception:
-    entity_ops = {}
-    query_builder = None
 
-# Authentication Tool
-@mcp.tool()
-def authenticate(personal_access_token: Optional[str] = None, 
+def initialize_synapse_client():
+    """Initialize Synapse client with optional pre-authentication."""
+    global entity_ops, query_builder
+
+    # Try pre-authentication with environment variable
+    pat = os.environ.get("SYNAPSE_PAT")
+    synapse_client = None
+
+    if pat:
+        try:
+            auth_manager.authenticate(personal_access_token=pat)
+            synapse_client = auth_manager.get_client()
+            print("Successfully pre-authenticated with Synapse using SYNAPSE_PAT")
+        except Exception as e:
+            print(f"Failed to pre-authenticate: {e}")
+
+    # Fall back to public client if no pre-auth or if pre-auth failed
+    if not synapse_client:
+        try:
+            synapse_client = synapseclient.Synapse()
+            print("Using public (unauthenticated) Synapse client")
+        except Exception as e:
+            print(f"Failed to create public client: {e}")
+            entity_ops = {}
+            query_builder = None
+            return
+
+    # Initialize entity operations with the client
+    try:
+        entity_ops = {
+            'base': BaseEntityOperations(synapse_client),
+            'project': ProjectOperations(synapse_client),
+            'folder': FolderOperations(synapse_client),
+            'file': FileOperations(synapse_client),
+            'table': TableOperations(synapse_client),
+            'dataset': DatasetOperations(synapse_client),
+        }
+        query_builder = QueryBuilder(synapse_client)
+    except Exception as e:
+        print(f"Failed to initialize entity operations: {e}")
+        entity_ops = {}
+        query_builder = None
+
+# Initialize the client on module load
+initialize_synapse_client()
+
+# Internal authentication function (not exposed as MCP tool)
+def authenticate(personal_access_token: Optional[str] = None,
                  oauth_code: Optional[str] = None, redirect_uri: Optional[str] = None, client_id: Optional[str] = None, client_secret: Optional[str] = None) -> Dict[str, Any]:
     """Authenticates with Synapse. Supports two distinct flows.
 
@@ -94,15 +123,15 @@ def authenticate(personal_access_token: Optional[str] = None,
             'message': f'Authentication failed: {str(e)}'
         }
 
-@mcp.tool()
+# Internal function for OAuth URL generation (not exposed as MCP tool)
 def get_oauth_url(client_id: str, redirect_uri: str, scope: str = "view") -> Dict[str, Any]:
     """Get the OAuth2 authorization URL for Synapse.
-    
+
     Args:
         client_id: OAuth2 client ID
         redirect_uri: Redirect URI for the OAuth2 flow
         scope: OAuth2 scope (default: "view")
-        
+
     Returns:
         The OAuth2 authorization URL
     """

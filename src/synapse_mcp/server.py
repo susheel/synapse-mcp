@@ -16,7 +16,8 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from synapse_mcp import mcp, authenticate, get_oauth_url, get_entity, get_entity_annotations, get_entity_children, search_entities, get_datasets_as_croissant
+from synapse_mcp import mcp, get_oauth_url, get_entity, get_entity_annotations, get_entity_children, search_entities, get_datasets_as_croissant
+from synapse_mcp import auth_manager, initialize_synapse_client
 from synapse_mcp import query_entities, query_table
 
 # Get the Starlette app from the MCP server
@@ -201,11 +202,42 @@ async def list_resources():
         }
     ]
 
-@mcp.custom_route("/tools/authenticate", methods=["POST"])
-async def tool_authenticate(request: Request):
-    """Authenticate with Synapse."""
-    data = await request.json()
-    return authenticate(**data)
+@mcp.custom_route("/auth", methods=["POST"])
+async def authenticate_endpoint(request: Request):
+    """Secure authentication endpoint with request body credentials."""
+    try:
+        data = await request.json()
+
+        # Handle different authentication methods
+        personal_access_token = data.get('personal_access_token')
+        oauth_code = data.get('oauth_code')
+        redirect_uri = data.get('redirect_uri')
+        client_id = data.get('client_id')
+        client_secret = data.get('client_secret')
+
+        if oauth_code and redirect_uri and client_id and client_secret:
+            # OAuth2 authentication
+            result = auth_manager.authenticate_with_oauth(
+                code=oauth_code, redirect_uri=redirect_uri,
+                client_id=client_id, client_secret=client_secret
+            )
+        elif personal_access_token:
+            # Direct authentication with Personal Access Token
+            auth_manager.authenticate(personal_access_token=personal_access_token)
+            result = {'success': True, 'message': 'Successfully authenticated with Synapse'}
+        else:
+            result = {'success': False, 'message': 'Authentication failed: No credentials provided.'}
+
+        # Re-initialize entity operations with new authenticated client if successful
+        if result.get("success"):
+            initialize_synapse_client()
+
+        return result
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Authentication request failed: {str(e)}"
+        }
 
 @mcp.custom_route("/tools/get_oauth_url", methods=["POST"])
 async def tool_get_oauth_url(request: Request):
@@ -292,8 +324,8 @@ async def oauth_callback(code: str, state: str = "", error: str = "", error_desc
         return {"error": "Missing OAuth2 server configuration"}
 
     # Exchange authorization code for tokens with Synapse
-    auth_result = authenticate(
-        oauth_code=code,
+    auth_result = auth_manager.authenticate_with_oauth(
+        code=code,
         redirect_uri=redirect_uri,
         client_id=client_id,
         client_secret=client_secret
@@ -523,6 +555,7 @@ def main():
     parser.add_argument("--port", type=int, default=9000, help="Port to listen on")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--server-url", help="Public URL of the server (for OAuth2 redirect)")
+    parser.add_argument("--use-pat", action="store_true", help="Use Personal Access Token for authentication")
     parser.add_argument("--personal-access-token", help="Synapse Personal Access Token for pre-authentication")
     args = parser.parse_args()
     
@@ -548,15 +581,7 @@ def main():
     logger = logging.getLogger("synapse_mcp")
     logger.info(f"Starting Synapse MCP server on {args.host}:{args.port}")
 
-    # Pre-authenticate if a Personal Access Token is provided
-    pat = args.personal_access_token or os.environ.get("SYNAPSE_PERSONAL_ACCESS_TOKEN")
-    if pat:
-        logger.info("Attempting pre-authentication with Personal Access Token.")
-        auth_result = authenticate(personal_access_token=pat)
-        if auth_result.get("success"):
-            logger.info("Successfully pre-authenticated with Synapse.")
-        else:
-            logger.error(f"Failed to pre-authenticate: {auth_result.get('message')}")
+    # Authentication is now handled during module initialization
     
     # Set the server URL
     mcp.server_url = server_url
