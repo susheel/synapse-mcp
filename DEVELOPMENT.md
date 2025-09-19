@@ -35,7 +35,7 @@ Using debug mode is recommended to see detailed logs.
 
 For the simplest setup, you can run the server using a Synapse Personal Access Token (PAT). The server will automatically detect the `SYNAPSE_PAT` environment variable, skip OAuth configuration, and use HTTP transport.
 ```bash
-export SYNAPSE_PAT="YOUR_TOKEN_HERE" 
+export SYNAPSE_PAT=$SYNAPSE_AUTH_TOKEN
 synapse-mcp --debug
 ```
 
@@ -43,12 +43,12 @@ synapse-mcp --debug
 
 This is more advanced and fully intended for contributors. This method uses FastMCP's OAuth proxy for production-like testing. You **must** have development [OAuth 2.0 client credentials](https://help.synapse.org/docs/Using-Synapse-as-an-OAuth-Server.2048327904.html) and supply them to the application as environment variables.
 
-Before starting the server, run the following commands in your terminal, replacing the placeholders with the actual values:
+Before starting the server, run the following commands, replacing the placeholders with the actual env vars or values below. (Make sure `SYNAPSE_PAT` is unset, since `SYNAPSE_PAT` check takes precedence.)
 
 ```bash
 # Set these values for your current terminal session
-export SYNAPSE_OAUTH_CLIENT_ID="your_dev_client_id"
-export SYNAPSE_OAUTH_CLIENT_SECRET="your_dev_client_secret"
+export SYNAPSE_OAUTH_CLIENT_ID=$SYNAPSE_OAUTH_CLIENT_ID
+export SYNAPSE_OAUTH_CLIENT_SECRET=$SYNAPSE_OAUTH_CLIENT_SECRET
 export SYNAPSE_OAUTH_REDIRECT_URI="http://127.0.0.1:9000/oauth/callback"
 export MCP_SERVER_URL="http://127.0.0.1:9000/mcp"
 synapse-mcp --debug
