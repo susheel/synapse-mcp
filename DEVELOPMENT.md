@@ -78,17 +78,17 @@ Build and run the server using Docker.
 # Build the Docker image
 docker build -t synapse-mcp .
 
-# Run the container with PAT (HTTP transport)
+# Run the container with PAT
 docker run -p 9000:9000 \
   -e SYNAPSE_PAT="your_token_here" \
   synapse-mcp
 
-# OR run with OAuth (STDIO transport)
+# OR run with OAuth
 docker run -p 9000:9000 \
-  -e SYNAPSE_OAUTH_CLIENT_ID="your_client_id" \
-  -e SYNAPSE_OAUTH_CLIENT_SECRET="your_client_secret" \
+  -e SYNAPSE_OAUTH_CLIENT_ID=$SYNAPSE_OAUTH_CLIENT_ID \
+  -e SYNAPSE_OAUTH_CLIENT_SECRET=$SYNAPSE_OAUTH_CLIENT_SECRET \
   -e SYNAPSE_OAUTH_REDIRECT_URI="http://localhost:9000/oauth/callback" \
-  -e MCP_SERVER_URL="http://localhost:9000" \
+  -e MCP_SERVER_URL="http://localhost:9000/mcp" \
   -e MCP_TRANSPORT="streamable-http" \
   synapse-mcp
 ```
