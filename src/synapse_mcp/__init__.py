@@ -1,9 +1,7 @@
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 from typing import Dict, List, Any, Optional, Union
 import synapseclient
 import os
-
-from .auth import SynapseAuth
 from .entities import (
     BaseEntityOperations,
     ProjectOperations,
@@ -16,82 +14,90 @@ from .query import QueryBuilder
 from .utils import validate_synapse_id, format_annotations
 from .entities.croissant import convert_to_croissant
 
-# Create an MCP server with a placeholder URL
-# The actual URL will be set when the server is run
-mcp = FastMCP("Synapse MCP Server")
+# Create an MCP server with OAuth authentication
+from .auth import create_oauth_proxy
 
-# Initialize authentication and entity operations
-auth_manager = SynapseAuth()
-entity_ops = {}
-query_builder = None
+auth = create_oauth_proxy()
+mcp = FastMCP("Synapse MCP Server", auth=auth)
 
-# Authentication Tool
-@mcp.tool()
-def authenticate(auth_token: Optional[str] = None, oauth_code: Optional[str] = None, redirect_uri: Optional[str] = None, client_id: Optional[str] = None, client_secret: Optional[str] = None) -> Dict[str, Any]:
-    """Authenticate with Synapse using Auth Token.
-    
-    Args:
-        auth_token: Synapse authentication token
-        
+# A single Synapse client instance is used by all operations.
+# This will be authenticated with either PAT or OAuth access token
+synapse_client = synapseclient.Synapse()
+
+# Authentication state tracking
+_auth_initialized = False
+_using_pat_auth = False
+
+def initialize_authentication():
+    """Initialize authentication using PAT if available, otherwise prepare for OAuth.
+
     Returns:
-        Authentication result
+        tuple: (auth_initialized: bool, using_pat: bool)
     """
-    global entity_ops, query_builder
-    try:
-        # Authenticate with Synapse
-        if oauth_code and redirect_uri and client_id and client_secret:
-            # OAuth2 authentication
-            result = auth_manager.authenticate_with_oauth(
-                code=oauth_code, redirect_uri=redirect_uri, 
-                client_id=client_id, client_secret=client_secret
-            )
-            if not result.get("success", False):
-                return result
-        
-        # Get the authenticated client
-        synapse_client = auth_manager.get_client()
-        
-        # Initialize entity operations
-        entity_ops = {
-            'base': BaseEntityOperations(synapse_client),
-            'project': ProjectOperations(synapse_client),
-            'folder': FolderOperations(synapse_client),
-            'file': FileOperations(synapse_client),
-            'table': TableOperations(synapse_client),
-            'dataset': DatasetOperations(synapse_client),
-        }
-        
-        # Initialize query builder
-        query_builder = QueryBuilder(synapse_client)
-        
-        return {
-            'success': True,
-            'message': 'Successfully authenticated with Synapse'
-        }
-    except Exception as e:
-        return {
-            'success': False,
-            'message': f'Authentication failed: {str(e)}'
-        }
+    global _auth_initialized, _using_pat_auth
 
-@mcp.tool()
-def get_oauth_url(client_id: str, redirect_uri: str, scope: str = "view") -> Dict[str, Any]:
-    """Get the OAuth2 authorization URL for Synapse.
-    
-    Args:
-        client_id: OAuth2 client ID
-        redirect_uri: Redirect URI for the OAuth2 flow
-        scope: OAuth2 scope (default: "view")
-        
-    Returns:
-        The OAuth2 authorization URL
-    """
-    try:
-        auth_url = auth_manager.get_oauth_url(client_id, redirect_uri, scope)
-        return {"success": True, "auth_url": auth_url}
-    except Exception as e:
-        return {"success": False, "message": f"Failed to generate OAuth URL: {str(e)}"}
+    if _auth_initialized:
+        return _auth_initialized, _using_pat_auth
 
+    # Try PAT authentication first
+    synapse_pat = os.environ.get("SYNAPSE_PAT")
+    if synapse_pat:
+        print("SYNAPSE_PAT detected - initializing with Personal Access Token")
+        try:
+            synapse_client.login(authToken=synapse_pat, silent=True)
+            profile = synapse_client.getUserProfile()
+            _auth_initialized = True
+            _using_pat_auth = True
+            print(f"Successfully authenticated with PAT as: {profile['userName']} ({profile['ownerId']})")
+            return True, True
+        except Exception as e:
+            print(f"Failed to authenticate with SYNAPSE_PAT: {e}")
+            _auth_initialized = False
+            _using_pat_auth = False
+            return False, False
+
+    # No PAT available - OAuth will be needed
+    print("No SYNAPSE_PAT found - OAuth authentication will be required")
+    _auth_initialized = False
+    _using_pat_auth = False
+    return False, False
+
+def authenticate_synapse_client(access_token: str):
+    """Authenticate the global Synapse client with OAuth access token"""
+    global _auth_initialized, _using_pat_auth
+    try:
+        # Use the access token to authenticate the Synapse client
+        synapse_client.login(authToken=access_token)
+        _auth_initialized = True
+        _using_pat_auth = False
+        print(f"Synapse client authenticated successfully with OAuth")
+        return True
+    except Exception as e:
+        print(f"Failed to authenticate Synapse client: {e}")
+        _auth_initialized = False
+        return False
+
+def is_authenticated():
+    """Check if the Synapse client is authenticated."""
+    return _auth_initialized
+
+def is_using_pat_auth():
+    """Check if currently using PAT authentication."""
+    return _using_pat_auth
+
+# Initialize authentication immediately
+initialize_authentication()
+
+# Initialize entity operations and query builder with the client instance
+entity_ops = {
+    'base': BaseEntityOperations(synapse_client),
+    'project': ProjectOperations(synapse_client),
+    'folder': FolderOperations(synapse_client),
+    'file': FileOperations(synapse_client),
+    'table': TableOperations(synapse_client),
+    'dataset': DatasetOperations(synapse_client),
+}
+query_builder = QueryBuilder(synapse_client)
 
 # Entity Retrieval Tools
 @mcp.tool()
@@ -104,9 +110,6 @@ def get_entity(entity_id: str) -> Dict[str, Any]:
     Returns:
         The entity as a dictionary
     """
-    # Public entities don't require authentication
-    # Private entities will be handled by the Synapse client
-    
     if not validate_synapse_id(entity_id):
         return {'error': f'Invalid Synapse ID: {entity_id}'}
     
@@ -125,9 +128,6 @@ def get_entity_annotations(entity_id: str) -> Dict[str, Any]:
     Returns:
         The entity annotations as a dictionary
     """
-    # Public entities don't require authentication
-    # Private entities will be handled by the Synapse client
-    
     if not validate_synapse_id(entity_id):
         return {'error': f'Invalid Synapse ID: {entity_id}'}
     
@@ -147,9 +147,6 @@ def get_entity_children(entity_id: str) -> List[Dict[str, Any]]:
     Returns:
         List of child entities
     """
-    # Public entities don't require authentication
-    # Private entities will be handled by the Synapse client
-    
     if not validate_synapse_id(entity_id):
         return [{'error': f'Invalid Synapse ID: {entity_id}'}]
     
@@ -190,25 +187,23 @@ def search_entities(search_term: str, entity_type: Optional[str] = None, parent_
 
 @mcp.tool()
 def query_entities(entity_type: Optional[str] = None, parent_id: Optional[str] = None, 
-                  name: Optional[str] = None, annotations: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+                  name: Optional[str] = None, annotations: Optional[str] = None) -> List[Dict[str, Any]]:
     """Query entities based on various criteria.
     
     Args:
         entity_type: Type of entity to query (project, folder, file, table, dataset)
         parent_id: Parent entity ID to filter by
         name: Entity name to filter by
-        annotations: Annotations to filter by
+        annotations: Annotations to filter by (as a JSON string)
         
     Returns:
         List of entities matching the query
     """
-    # Public entities don't require authentication
-    # Private entities will be handled by the Synapse client
-    
     if not query_builder:
         return [{'error': 'Query builder not initialized'}]
     
     try:
+        import json
         # Build query parameters
         params = {}
         if entity_type:
@@ -218,7 +213,7 @@ def query_entities(entity_type: Optional[str] = None, parent_id: Optional[str] =
         if name:
             params['name'] = name
         if annotations:
-            params['annotations'] = annotations
+            params['annotations'] = json.loads(annotations)
         
         # Build and execute query
         query = query_builder.build_combined_query(params)
@@ -237,9 +232,6 @@ def query_table(table_id: str, query: str) -> Dict[str, Any]:
     Returns:
         Query results
     """
-    # Public tables don't require authentication
-    # Private tables will be handled by the Synapse client
-    
     if not validate_synapse_id(table_id):
         return {'error': f'Invalid Synapse ID: {table_id}'}
     
@@ -255,33 +247,11 @@ def get_datasets_as_croissant() -> Dict[str, Any]:
     Returns:
         Datasets in Croissant metadata format
     """
-    try:
-        # Query the public datasets table
-        table_id = "syn61609402"  # The specific table ID for public datasets
-
-        # Try to query the actual table if authenticated
-        if auth_manager.is_authenticated():
-            query_result = query_table(table_id, "SELECT * FROM syn61609402")
-            if 'error' not in query_result:
-                # Convert to Croissant format
-                return convert_to_croissant(query_result)
-
-        # If not authenticated or query failed, return sample data
-        # This allows the API to work without authentication for demo purposes
-        sample_data = {
-            'headers': ['id', 'title', 'description', 'diseaseFocus', 'dataType', 'yearProcessed', 'fundingAgency'],
-            'data': [
-                ['syn12345678', 'Sample Dataset', 'A sample dataset for demonstration', 'Neuroscience', 'Genomics', '2023', 'NIH'],
-                ['syn87654321', 'Another Dataset', 'Another sample dataset', 'Cancer', 'Proteomics', '2024', 'NCI']
-            ]
-        }
-        
-        # Convert to Croissant format
-        croissant_data = convert_to_croissant(sample_data)
-        
-        return croissant_data
-    except Exception as e:
-        return {'error': str(e), 'message': 'Failed to convert datasets to Croissant format'}
+    table_id = "syn61609402"
+    query_result = query_table(table_id, f"SELECT * FROM {table_id}")
+    if 'error' in query_result:
+        return query_result
+    return convert_to_croissant(query_result)
 
 
 # Entity Resources
@@ -484,20 +454,3 @@ def query_table_resource(id: str, query: str) -> Dict[str, Any]:
     decoded_query = urllib.parse.unquote(query)
     return query_table(id, decoded_query)
 
-# Function to run the server
-def run_server(host: str = "127.0.0.1", port: int = 9000, server_url: Optional[str] = None):
-    """Run the MCP server."""
-    # Determine the transport type based on environment variable
-    # Use STDIO for local development and SSE for cloud deployment
-    transport_env = os.environ.get("MCP_TRANSPORT", "stdio").lower()
-    
-    # Ensure transport is one of the allowed literal values
-    if transport_env == "sse":
-        transport = "sse"
-    else:
-        transport = "stdio"  # Default to stdio for local development
-    
-    # Set the server URL if provided
-    if server_url:
-        os.environ["MCP_SERVER_URL"] = server_url or "mcp://127.0.0.1:9000"
-    mcp.run(transport=transport)
