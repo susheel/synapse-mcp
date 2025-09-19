@@ -25,7 +25,7 @@ The Synapse MCP server supports two authentication methods:
 
 ### Connecting to the Server
 
-#### Remote Server (Beta)
+#### Remote Server
 
 You can connect to our deployed remote server, which skips the need for local installation. Authentication is handled via the default OAuth2 flow.
 
@@ -51,21 +51,36 @@ pip install synapse-mcp
 
 *   **For OAuth2 (Default):** Simply start the server.
     ```bash
-    synapse-mcp --port 9000
+    synapse-mcp
     ```
 
 *   **For Personal Access Token (PAT):** For using PAT, first generate one from your Synapse account settings. Then, start the server with the `SYNAPSE_PAT` environment variable set.
     ```bash
     export SYNAPSE_PAT="YOUR_TOKEN_HERE"
-    synapse-mcps
+    synapse-mcp
     ```
 
 **3. Configure Your AI Client:**
 
-*   **Claude Code:**
+The connection method depends on which authentication you're using:
+
+*   **Claude Code with PAT (HTTP transport):**
     ```bash
-    # Add your local server (ensure you use the full URL)
-    claude mcp add --transport http synapse -- http://127.0.0.1:9000
+    # Start server with PAT
+    export SYNAPSE_PAT="YOUR_TOKEN_HERE"
+    synapse-mcp
+
+    # Connect via HTTP
+    claude mcp add --transport http synapse -- http://127.0.0.1:9000/mcp
+    ```
+
+*   **Claude Code with OAuth or no auth (STDIO transport):**
+    ```bash
+    # Start server
+    synapse-mcp
+
+    # Connect via STDIO
+    claude mcp add synapse -- synapse-mcp --debug
     ```
 
 *   **Claude Desktop (Using PAT):** If you are using PAT authentication with the local server, you can configure Claude Desktop to pass the token.
