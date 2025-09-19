@@ -1,82 +1,67 @@
+"""
+FastMCP OAuth proxy configuration for Synapse authentication.
+"""
 
 import os
-import logging
-import synapseclient
-from urllib.parse import urlencode
+from fastmcp.server.auth import OAuthProxy
+from fastmcp.server.auth.providers.jwt import JWTVerifier
 
-class SynapseAuth:
-    """
-    Manages Synapse authentication for both Personal Access Token (PAT) and OAuth2 flows.
-    """
-    def __init__(self):
-        self.synapse_client: synapseclient.Synapse | None = None
-        self.user_profile: dict | None = None
+def create_oauth_proxy():
+    """Create OAuth proxy for Synapse authentication."""
+    # Skip OAuth if PAT is provided
+    synapse_pat = os.environ.get("SYNAPSE_PAT")
+    if synapse_pat:
+        print(f"SYNAPSE_PAT detected - skipping OAuth configuration")
+        return None
 
-    def authenticate(self, personal_access_token: str) -> None:
-        """
-        Authenticates with Synapse using a Personal Access Token (PAT).
-        """
-        logging.info("Attempting to authenticate with Synapse PAT...")
-        try:
-            client = synapseclient.Synapse()
-            client.login(authToken=personal_access_token, silent=True)
-            profile = client.getUserProfile()
-            self.synapse_client = client
-            self.user_profile = profile
-            logging.info(f"Successfully authenticated as Synapse user: {profile['userName']} ({profile['ownerId']})")
-        except Exception as e:
-            logging.error(f"Failed to authenticate with Synapse PAT: {e}")
-            self.synapse_client = None
-            self.user_profile = None
-            raise
+    # Get OAuth configuration from environment
+    client_id = os.environ.get("SYNAPSE_OAUTH_CLIENT_ID")
+    client_secret = os.environ.get("SYNAPSE_OAUTH_CLIENT_SECRET")
+    redirect_uri = os.environ.get("SYNAPSE_OAUTH_REDIRECT_URI")
+    server_url = os.environ.get("MCP_SERVER_URL", "http://127.0.0.1:9000")
 
-    def authenticate_with_oauth(self, code: str, redirect_uri: str, client_id: str, client_secret: str) -> dict:
-        """
-        Completes the OAuth2 authentication flow.
-        This is a placeholder as the actual implementation would involve exchanging the code for a token.
-        """
-        # In a real implementation, you would exchange the code for an access token here.
-        # For now, we'll just simulate success if a code is provided.
-        if code:
-            # This is where you would use the synapseclient to complete the OAuth flow.
-            # Since the library handles this internally when you call login,
-            # this method is more for demonstrating the flow.
-            # We'll assume for now that if we get a code, we can get a client.
-            self.synapse_client = synapseclient.Synapse()
-            # You'd typically login here with the token obtained from the code
-            # self.synapse_client.login(authToken=access_token)
-            self.user_profile = self.synapse_client.getUserProfile()
-            return {"success": True, "message": "OAuth authentication successful (simulated)."}
-        return {"success": False, "message": "OAuth authentication failed: No code provided."}
+    # For streamable-http transport, OAuth endpoints are at root level
+    # Remove /mcp suffix if present to ensure OAuth endpoints work
+    if server_url.endswith("/mcp"):
+        server_url = server_url[:-4]
 
+    if not all([client_id, client_secret, redirect_uri]):
+        print("OAuth configuration missing - running without authentication")
+        return None
 
-    def get_client(self) -> synapseclient.Synapse | None:
-        """
-        Returns the authenticated Synapse client.
-        """
-        return self.synapse_client
+    # Configure JWT verifier for Synapse tokens
+    jwt_verifier = JWTVerifier(
+        # Synapse uses RS256 for JWT signing
+        algorithm="RS256",
+        # Use Synapse's JWKS endpoint for public key verification
+        jwks_uri="https://repo-prod.prod.sagebase.org/auth/v1/oauth2/jwks",
+        # Required scopes for Synapse API access
+        required_scopes=["openid", "view", "download", "offline_access"]
+    )
 
-    def is_authenticated(self) -> bool:
-        """
-        Checks if the client is authenticated.
-        """
-        return self.synapse_client is not None
+    # Configure redirect path to match registered Synapse OAuth client
+    # FastMCP default is /auth/callback, but we need /oauth/callback to match registration
+    redirect_path = "/oauth/callback"
 
-    def get_oauth_url(self, client_id: str, redirect_uri: str, scope: str = "view", state: str = None) -> str:
-        """
-        Get the OAuth2 authorization URL for Synapse.
-        """
-        import uuid
-        if state is None:
-            state = str(uuid.uuid4())
-        params = {
-            'client_id': client_id,
-            'redirect_uri': redirect_uri,
-            'response_type': 'code',
-            'scope': f'openid {scope}',
-            'state': state
-        }
-        auth_url = f"https://signin.synapse.org?{urlencode(params)}"
-        return auth_url
+    # Create OAuth proxy pointing to Synapse OAuth endpoints
+    # Available scopes: https://rest-docs.synapse.org/rest/org/sagebionetworks/repo/model/oauth/OAuthScope.html
+    # - openid: Required scope for OpenID Connect
+    # - email: Returns email claims when used with 'openid'
+    # - profile: Returns user profile information when used with 'openid'
+    # - ga4gh_passport_v1: Returns GA4GH Passport when used with 'openid'
+    # - view: Read object metadata
+    # - download: Download data
+    # - modify: Create or change content
+    # - authorize: Authorize access and share resources
+    # - offline_access: Access resources when user is not logged in
+    auth = OAuthProxy(
+        upstream_authorization_endpoint="https://signin.synapse.org",
+        upstream_token_endpoint="https://auth.synapse.org/oauth2/token",
+        upstream_client_id=client_id,
+        upstream_client_secret=client_secret,
+        redirect_path=redirect_path,
+        token_verifier=jwt_verifier,
+        base_url=server_url
+    )
 
-
+    return auth

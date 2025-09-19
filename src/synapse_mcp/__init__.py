@@ -1,4 +1,4 @@
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 from typing import Dict, List, Any, Optional, Union
 import synapseclient
 import os
@@ -14,9 +14,11 @@ from .query import QueryBuilder
 from .utils import validate_synapse_id, format_annotations
 from .entities.croissant import convert_to_croissant
 
-# Create an MCP server with a placeholder URL
-# The actual URL will be updated before the server is run
-mcp = FastMCP("Synapse MCP Server")
+# Create an MCP server with OAuth authentication
+from .auth import create_oauth_proxy
+
+auth = create_oauth_proxy()
+mcp = FastMCP("Synapse MCP Server", auth=auth)
 
 # A single Synapse client instance is used by all operations.
 # Authentication is handled by the middleware in server.py and auth_server.py,
@@ -391,24 +393,3 @@ def query_table_resource(id: str, query: str) -> Dict[str, Any]:
     decoded_query = urllib.parse.unquote(query)
     return query_table(id, decoded_query)
 
-# Function to run the server
-def run_server(host: str = "127.0.0.1", port: int = 9000, server_url: Optional[str] = None):
-    """Run the MCP server."""
-    # Ensure MCP is initialized
-    if mcp is None:
-        raise RuntimeError("MCP server not initialized. Call init_mcp() first.")
-
-    # Determine the transport type based on environment variable
-    # Use STDIO for local development and SSE for cloud deployment
-    transport_env = os.environ.get("MCP_TRANSPORT", "stdio").lower()
-    
-    # Ensure transport is one of the allowed literal values
-    if transport_env == "sse":
-        transport = "sse"
-    else:
-        transport = "stdio"  # Default to stdio for local development
-    
-    # Set the server URL if provided
-    if server_url:
-        os.environ["MCP_SERVER_URL"] = server_url or "mcp://127.0.0.1:9000"
-    mcp.run(transport=transport)
