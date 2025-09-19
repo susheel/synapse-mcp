@@ -47,8 +47,8 @@ Before starting the server, run the following commands, replacing the placeholde
 
 ```bash
 # Set these values for your current terminal session
-export SYNAPSE_OAUTH_CLIENT_ID=$SYNAPSE_OAUTH_CLIENT_ID
-export SYNAPSE_OAUTH_CLIENT_SECRET=$SYNAPSE_OAUTH_CLIENT_SECRET
+export SYNAPSE_OAUTH_CLIENT_ID=$CLIENT_ID
+export SYNAPSE_OAUTH_CLIENT_SECRET=$CLIENT_SECRET
 export SYNAPSE_OAUTH_REDIRECT_URI="http://127.0.0.1:9000/oauth/callback"
 export MCP_SERVER_URL="http://127.0.0.1:9000/mcp"
 synapse-mcp --debug
