@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/susheel-synapse-mcp-badge.png)](https://mseep.ai/app/susheel-synapse-mcp)
+
 # Synapse MCP Server
 
 A Model Context Protocol (MCP) server that exposes Synapse Entities (Datasets, Projects, Folders, Files, Tables) with their annotations and supports OAuth2 authentication.
