@@ -21,11 +21,19 @@ auth = create_oauth_proxy()
 mcp = FastMCP("Synapse MCP Server", auth=auth)
 
 # A single Synapse client instance is used by all operations.
-# Authentication is handled by the middleware in server.py and auth_server.py,
-# which can dynamically provide credentials to this client instance as needed,
-# particularly in the context of a request. For PAT-based auth, the client
-# is configured at startup.
+# This will be authenticated with the user's access token after OAuth flow
 synapse_client = synapseclient.Synapse()
+
+def authenticate_synapse_client(access_token: str):
+    """Authenticate the global Synapse client with OAuth access token"""
+    try:
+        # Use the access token to authenticate the Synapse client
+        synapse_client.login(authToken=access_token)
+        print(f"Synapse client authenticated successfully")
+        return True
+    except Exception as e:
+        print(f"Failed to authenticate Synapse client: {e}")
+        return False
 
 # Initialize entity operations and query builder with the client instance
 entity_ops = {
