@@ -1,19 +1,19 @@
-# fly.toml app configuration file generated for synapse-mcp on 2025-03-31T06:41:06+01:00
+# fly.toml app configuration file generated for synapse-research-mcp on 2025-09-16T08:52:54-07:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'synapse-mcp'
+app = 'synapse-research-mcp'
 primary_region = 'sea'
 
 [build]
   dockerfile = 'Dockerfile'
 
 [env]
-  MCP_SERVER_URL = 'mcp://synapse-mcp.fly.dev:9000'
-  PORT = '9000'
   HOST = '0.0.0.0'
-  MCP_TRANSPORT = 'sse'
+  MCP_SERVER_URL = 'https://synapse-mcp.fly.dev/mcp'
+  MCP_TRANSPORT = 'streamable-http'
+  PORT = '9000'
 
 [http_service]
   internal_port = 9000
@@ -33,7 +33,7 @@ primary_region = 'sea'
     timeout = '5s'
     grace_period = '10s'
     method = 'GET'
-    path = '/info'
+    path = '/mcp/info'
 
 [[vm]]
   memory = '1gb'
