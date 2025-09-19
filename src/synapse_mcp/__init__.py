@@ -85,6 +85,9 @@ def is_using_pat_auth():
     """Check if currently using PAT authentication."""
     return _using_pat_auth
 
+# Initialize authentication immediately
+initialize_authentication()
+
 # Initialize entity operations and query builder with the client instance
 entity_ops = {
     'base': BaseEntityOperations(synapse_client),
