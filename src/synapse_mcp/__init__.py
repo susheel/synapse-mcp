@@ -21,19 +21,69 @@ auth = create_oauth_proxy()
 mcp = FastMCP("Synapse MCP Server", auth=auth)
 
 # A single Synapse client instance is used by all operations.
-# This will be authenticated with the user's access token after OAuth flow
+# This will be authenticated with either PAT or OAuth access token
 synapse_client = synapseclient.Synapse()
+
+# Authentication state tracking
+_auth_initialized = False
+_using_pat_auth = False
+
+def initialize_authentication():
+    """Initialize authentication using PAT if available, otherwise prepare for OAuth.
+
+    Returns:
+        tuple: (auth_initialized: bool, using_pat: bool)
+    """
+    global _auth_initialized, _using_pat_auth
+
+    if _auth_initialized:
+        return _auth_initialized, _using_pat_auth
+
+    # Try PAT authentication first
+    synapse_pat = os.environ.get("SYNAPSE_PAT")
+    if synapse_pat:
+        print("SYNAPSE_PAT detected - initializing with Personal Access Token")
+        try:
+            synapse_client.login(authToken=synapse_pat, silent=True)
+            profile = synapse_client.getUserProfile()
+            _auth_initialized = True
+            _using_pat_auth = True
+            print(f"Successfully authenticated with PAT as: {profile['userName']} ({profile['ownerId']})")
+            return True, True
+        except Exception as e:
+            print(f"Failed to authenticate with SYNAPSE_PAT: {e}")
+            _auth_initialized = False
+            _using_pat_auth = False
+            return False, False
+
+    # No PAT available - OAuth will be needed
+    print("No SYNAPSE_PAT found - OAuth authentication will be required")
+    _auth_initialized = False
+    _using_pat_auth = False
+    return False, False
 
 def authenticate_synapse_client(access_token: str):
     """Authenticate the global Synapse client with OAuth access token"""
+    global _auth_initialized, _using_pat_auth
     try:
         # Use the access token to authenticate the Synapse client
         synapse_client.login(authToken=access_token)
-        print(f"Synapse client authenticated successfully")
+        _auth_initialized = True
+        _using_pat_auth = False
+        print(f"Synapse client authenticated successfully with OAuth")
         return True
     except Exception as e:
         print(f"Failed to authenticate Synapse client: {e}")
+        _auth_initialized = False
         return False
+
+def is_authenticated():
+    """Check if the Synapse client is authenticated."""
+    return _auth_initialized
+
+def is_using_pat_auth():
+    """Check if currently using PAT authentication."""
+    return _using_pat_auth
 
 # Initialize entity operations and query builder with the client instance
 entity_ops = {

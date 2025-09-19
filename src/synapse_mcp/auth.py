@@ -111,10 +111,13 @@ class SynapseJWTVerifier:
 
 def create_oauth_proxy():
     """Create OAuth proxy for Synapse authentication."""
-    # Skip OAuth if PAT is provided
-    synapse_pat = os.environ.get("SYNAPSE_PAT")
-    if synapse_pat:
-        print(f"SYNAPSE_PAT detected - skipping OAuth configuration")
+    # Import here to avoid circular imports
+    from synapse_mcp import initialize_authentication
+
+    # Check if PAT authentication is successful
+    auth_initialized, using_pat = initialize_authentication()
+    if using_pat and auth_initialized:
+        print("PAT authentication successful - skipping OAuth configuration")
         return None
 
     # Get OAuth configuration from environment
