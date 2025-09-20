@@ -13,6 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run the Synapse MCP server")
     parser.add_argument("--host", help="Host to bind to (for HTTP transport)")
     parser.add_argument("--port", type=int, help="Port to listen on (for HTTP transport)")
+    parser.add_argument("--http", action="store_true", help="Use HTTP transport instead of default stdio")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
 
@@ -27,19 +28,19 @@ def main():
     transport_env = os.environ.get("MCP_TRANSPORT", "").lower()
 
     # Determine the actual transport to use
-    if transport_env == "stdio":
+    if args.http or transport_env in ["sse", "streamable-http"]:
+        if transport_env == "sse":
+            transport = "sse"
+        else:
+            transport = "streamable-http"
+        use_http = True
+    elif transport_env == "stdio":
         transport = "stdio"
         use_http = False
-    elif transport_env == "sse":
-        transport = "sse"
-        use_http = True
-    elif transport_env == "streamable-http":
-        transport = "streamable-http"
-        use_http = True
     else:
-        # Default to streamable-http for HTTP development
-        transport = "streamable-http"
-        use_http = True
+        # Default to stdio for MCP clients
+        transport = "stdio"
+        use_http = False
 
     # Log server information
     logger = logging.getLogger("synapse_mcp")

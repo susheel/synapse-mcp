@@ -23,78 +23,45 @@ The Synapse MCP server supports two authentication methods:
 
 2.  **Personal Access Token (PAT):** This method is available for local development or in environments where a browser-based login is not feasible. It requires you to provide a Synapse Personal Access Token to the server.
 
-### Connecting to the Server
-
-#### Remote Server
-
-You can connect to our deployed remote server, which skips the need for local installation. Authentication is handled via the default OAuth2 flow.
-
-**Configure Your AI Client:**
-
-*   *Claude Code:**
-    ```bash
-    # Add the remote server
-    claude mcp add --transport http synapse -- https://synapse-mcp.fly.dev/mcp
-    ```
-    When you attempt to access a private Synapse resource, the client will automatically guide you through the browser login process.
+### Using the MCP Server
 
 #### Local Server
-
-For development or console-only use, you can run the server on your local machine.
 
 **1. Install the Package:**
 ```bash
 pip install synapse-mcp
 ```
 
-**2. Run the Server:**
+**2. Configure Your AI Client:**
 
-*   **For OAuth2 (Default):** Simply start the server.
-    ```bash
-    synapse-mcp
+The setup depends on which transport method you need:
+
+**Claude Code with local stdio transport (default):**
+
+The client automatically starts the server process:
+```bash
+claude mcp add synapse -- env SYNAPSE_PAT="YOUR_TOKEN_HERE" synapse-mcp
+```
+
+**Claude Desktop:**
+
+The client automatically starts the server process:
+1.  Open Claude Desktop Settings > Developer > Edit Config.
+2.  Add the following to `mcpServers`:
+    ```json
+    "synapse": {
+      "command": "synapse-mcp",
+      "env": {
+        "SYNAPSE_PAT": "YOUR_TOKEN_HERE"
+      }
+    }
     ```
+3.  Save the file and restart Claude Desktop.
 
-*   **For Personal Access Token (PAT):** For using PAT, first generate one from your Synapse account settings. Then, start the server with the `SYNAPSE_PAT` environment variable set.
-    ```bash
-    export SYNAPSE_PAT="YOUR_TOKEN_HERE"
-    synapse-mcp
-    ```
+#### Remote Server (WIP)
 
-**3. Configure Your AI Client:**
+Developments are underway for making synapse-mcp available as a remote server. See DEVELOPMENT.md if you would like to contribute. Stay tuned.
 
-The connection method depends on which authentication you're using:
-
-*   **Claude Code with PAT (HTTP transport):**
-    ```bash
-    # Start server with PAT
-    export SYNAPSE_PAT="YOUR_TOKEN_HERE"
-    synapse-mcp
-
-    # Connect via HTTP
-    claude mcp add --transport http synapse -- http://127.0.0.1:9000/mcp
-    ```
-
-*   **Claude Code with OAuth or no auth (STDIO transport):**
-    ```bash
-    # Start server
-    synapse-mcp
-
-    # Connect via STDIO
-    claude mcp add synapse -- synapse-mcp --debug
-    ```
-
-*   **Claude Desktop (Using PAT):** If you are using PAT authentication with the local server, you can configure Claude Desktop to pass the token.
-    1.  Open Claude Desktop Settings > Developer > Edit Config.
-    2.  Add the following to `mcpServers`:
-        ```json
-        "synapse": {
-          "command": "synapse-mcp",
-          "env": {
-            "SYNAPSE_PAT": "YOUR_TOKEN_HERE"
-          }
-        }
-        ```
-    3.  Save the file and restart Claude Desktop.
 
 ### Example Prompts
 

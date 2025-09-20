@@ -4,7 +4,7 @@ This guide provides instructions for setting up and running the Synapse MCP serv
 
 ## Local Development Setup
 
-To set up the server for local development, especially to contribute to the project, follow these steps to install in editable mode.
+To set up the server for local development, follow these steps to install in editable mode.
 
 ```bash
 # 1. Clone the repository
@@ -19,31 +19,29 @@ source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
 pip install --upgrade -e .
 ```
 
-This command uses the `-e` flag to install the package in "editable" mode, meaning any changes you make to the source code will be immediately effective. If you have previously installed the package, it is important to use the `--upgrade` flag to ensure the console script is properly generated.
+The `-e` flag to install the package in "editable" mode, meaning any changes you make to the source code will be immediately effective. If you have previously installed the package, it is important to use the `--upgrade` flag to ensure the console script is properly generated.
 
-## Running the Server Locally
+## 1. Run the Server Locally
 
-The server is built with FastMCP and supports two main authentication modes:
-- **PAT Authentication**: Simple setup for local development
-- **OAuth2 Authentication**: Uses FastMCP's OAuth proxy for production-like testing
+### Start server with HTTP transport for web development/testing
 
-Using debug mode is recommended to see detailed logs.
+The server supports two main authentication modes:
 
-### With Authentication
+- **PAT Authentication**: Setup for local development,
+- **OAuth2 Authentication**: Uses FastMCP's OAuth proxy for production-like testing,
 
-#### Method 1: Authentication with Personal Auth Token
+where the default is **stdio transport** for MCP client connections. For development, it is better to start server with `--http` flag (transport is streamable-http) and `--debug` to see detailed logs:
 
-For the simplest setup, you can run the server using a Synapse Personal Access Token (PAT). The server will automatically detect the `SYNAPSE_PAT` environment variable, skip OAuth configuration, and use HTTP transport.
 ```bash
 export SYNAPSE_PAT=$SYNAPSE_AUTH_TOKEN
-synapse-mcp --debug
+synapse-mcp --http --debug
 ```
 
-#### Method 2: Authentication with OAuth2
+**To also test OAuth2**
 
-This is more advanced and fully intended for contributors. This method uses FastMCP's OAuth proxy for production-like testing. You **must** have development [OAuth 2.0 client credentials](https://help.synapse.org/docs/Using-Synapse-as-an-OAuth-Server.2048327904.html) and supply them to the application as environment variables.
+This is fully intended for **contributors only** -- typical end users should use PAT authentication for local development. OAuth2 requires registering your own OAuth client with Synapse, which involves administrative steps that end users shouldn't need to do. As a contributor, you can also add new tools, etc. and test with the method above without having to register for a development client.
 
-Before starting the server, run the following commands, replacing the placeholders with the actual env vars or values below. (Make sure `SYNAPSE_PAT` is unset, since `SYNAPSE_PAT` check takes precedence.)
+Again, you must have development [OAuth 2.0 client credentials](https://help.synapse.org/docs/Using-Synapse-as-an-OAuth-Server.2048327904.html) registered with Synapse and set these environment variables. Make sure `SYNAPSE_PAT` is unset, since `SYNAPSE_PAT` check takes precedence.
 
 ```bash
 # Set these values for your current terminal session
@@ -51,13 +49,14 @@ export SYNAPSE_OAUTH_CLIENT_ID=$CLIENT_ID
 export SYNAPSE_OAUTH_CLIENT_SECRET=$CLIENT_SECRET
 export SYNAPSE_OAUTH_REDIRECT_URI="http://127.0.0.1:9000/oauth/callback"
 export MCP_SERVER_URL="http://127.0.0.1:9000/mcp"
-synapse-mcp --debug
+synapse-mcp --http --debug
 ```
 
-##### Adding local version to Claude Code
+### Add to local AI client like Claude Code
 
+```bash
 claude mcp add --transport http synapse -- http://127.0.0.1:9000/mcp
-
+```
 
 ## Running Tests
 
@@ -70,9 +69,7 @@ python -m pytest
 
 ## Deployment 
 
-### Docker
-
-Build and run the server using Docker.
+### Docker build and run
 
 ```bash
 # Build the Docker image
@@ -94,6 +91,9 @@ docker run -p 9000:9000 \
 ```
 
 ### Fly.io
+
+> [!CAUTION]
+> This is a placeholder deployment option only. The remote version is not ready for deployment yet due to security issues.
 
 The project is configured for easy deployment to [Fly.io](https://fly.io), a platform for running full-stack apps and databases close to your users.
 
