@@ -1,5 +1,6 @@
 """
-FastMCP OAuth proxy configuration for Synapse authentication.
+FastMCP OAuth proxy configuration for Synapse authentication. 
+
 """
 
 import os
@@ -9,105 +10,193 @@ import logging
 import asyncio
 from typing import Optional, Dict, Any, List
 from fastmcp.server.auth import OAuthProxy
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
+from jwt import PyJWKClient, decode
+from jwt.exceptions import PyJWTError
 
-# Set up logging for token debugging
 logger = logging.getLogger("synapse_mcp.auth")
 
 class SynapseJWTVerifier:
-    """Custom JWT verifier for Synapse tokens that returns FastMCP-compatible results"""
+    """Custom JWT verifier for Synapse tokens that returns FastMCP-compatible results; 
+    FastMCP's JWTVerifier could not be used due to slight differences in Synapse tokens."""
 
-    def __init__(self, jwks_uri: str, issuer: str, audience: str, algorithm: str = "RS256", required_scopes: Optional[List[str]] = None):
-        self.jwks_uri = jwks_uri
+    def __init__(self, jwks_uri: str, issuer: str, audience: str, 
+                 algorithm: str = "RS256", required_scopes: Optional[List[str]] = None):
+        """
+        Initialize the verifier with Synapse-specific configuration.
+        
+        Args:
+            jwks_uri: Synapse JWKS endpoint for key retrieval
+            issuer: Expected token issuer (Synapse auth server)
+            audience: Expected audience (OAuth client ID)
+            algorithm: JWT signing algorithm (Synapse uses RS256)
+            required_scopes: Minimum scopes required for access
+        """
         self.issuer = issuer
         self.audience = audience
         self.algorithm = algorithm
         self.required_scopes = required_scopes or []
-        self._jwks_cache = None
+        self.jwks_client = PyJWKClient(uri=jwks_uri)
+        
+        # Thread pool for running sync JWT operations in async context
+        self._executor = ThreadPoolExecutor(max_workers=2)
 
-    async def _get_jwks(self):
-        """Get JWKS from Synapse endpoint"""
-        if self._jwks_cache is None:
-            import httpx
-            async with httpx.AsyncClient() as client:
-                response = await client.get(self.jwks_uri)
-                self._jwks_cache = response.json()
-        return self._jwks_cache
-
-    async def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
-        """Verify Synapse JWT token and return access token info"""
+    async def verify_token(self, token: str) -> Optional[SimpleNamespace]:
+        """
+        Verify Synapse JWT token and return FastMCP-compatible access token info.
+        
+        Method needs to be async because:
+        1. FastMCP framework expects async token verification
+        2. We may need to make HTTP calls for JWKS refresh
+        3. Synapse client authentication should be non-blocking
+        
+        Returns:
+            SimpleNamespace object compatible with FastMCP's expected access token format,
+            or None if verification fails
+        """
         try:
-            import jwt
-            from jwt.exceptions import InvalidTokenError
-            from cryptography.hazmat.primitives import serialization
+            # Run the synchronous JWT verification in a thread pool
+            # PyJWKClient is synchronous but need async for FastMCP integration
+            result = await asyncio.get_event_loop().run_in_executor(
+                self._executor, self._verify_token_sync, token
+            )
+            return result
 
-            logger.info("Starting Synapse JWT verification")
+        except Exception as e:
+            logger.error(f"Error in async Synapse JWT verification: {e}")
+            return None
 
-            # Decode header to get key ID
-            header = jwt.get_unverified_header(token)
-            kid = header.get('kid')
-
-            # Get JWKS and find the right key
-            jwks = await self._get_jwks()
-            key = None
-            for jwk in jwks['keys']:
-                if jwk['kid'] == kid:
-                    # Convert JWK to public key
-                    public_key = jwt.algorithms.RSAAlgorithm.from_jwk(jwk)
-                    key = public_key
-                    break
-
-            if not key:
-                logger.error(f"No key found for kid: {kid}")
-                return None
-
-            # Decode and verify token
-            decoded = jwt.decode(
-                token,
-                key,
-                algorithms=[self.algorithm],
+    def _verify_token_sync(self, token: str) -> Optional[SimpleNamespace]:
+        """
+        Synchronous JWT verification using robust PyJWKClient approach.
+        """
+        try:
+            logger.info("Starting Synapse JWT verification using PyJWKClient")
+            signing_key = self.jwks_client.get_signing_key_from_jwt(token)
+            
+            decoded = decode(
+                jwt=token,
+                key=signing_key.key,
+                algorithms=[signing_key.algorithm_name],
                 audience=self.audience,
-                issuer=self.issuer
+                issuer=self.issuer,
+                options={"verify_aud": True}
             )
 
-            logger.info(f"JWT Payload: {decoded}")
+            logger.info(f"JWT successfully decoded. Subject: {decoded.get('sub')}")
 
-            # Extract scopes from Synapse's nested structure
-            scopes = []
-            if 'access' in decoded and 'scope' in decoded['access']:
-                scopes = decoded['access']['scope']
-                logger.info(f"Extracted scopes from access.scope: {scopes}")
+            # Synapse stores scopes in a nested structure: token.access.scope
+            # This is different from standard OAuth where scopes are at the root level
+            scopes = self._extract_synapse_scopes(decoded)
+            logger.info(f"Extracted scopes: {scopes}")
 
-            # Check required scopes
-            if self.required_scopes:
-                token_scopes = set(scopes)
-                required_scopes = set(self.required_scopes)
-                if not required_scopes.issubset(token_scopes):
-                    logger.warning(f"Required scopes {required_scopes} not found in token scopes {token_scopes}")
-                    return None
+            # Validate required scopes for this resource server
+            if not self._validate_required_scopes(scopes):
+                logger.warning(f"Token lacks required scopes: {self.required_scopes}")
+                return None
 
-            # Authenticate the global Synapse client with this access token
-            from synapse_mcp import authenticate_synapse_client
-            authenticate_synapse_client(token)
+            # Authenticate global Synapse client with this token
+            # This is Synapse-specific: we need to configure the synapseclient
+            # to use this token for subsequent API calls
+            self._authenticate_synapse_client(token)
 
             # Return FastMCP-compatible access token object
-            from types import SimpleNamespace
+            # FastMCP expects a specific object structure with these attributes
+            return self._create_fastmcp_access_token(decoded, scopes, token)
 
-            access_token = SimpleNamespace()
-            access_token.sub = decoded.get("sub")
-            access_token.scopes = scopes
-            access_token.claims = decoded
-            access_token.token = token
-            access_token.expires_at = decoded.get("exp", 0)  # Add expires_at attribute
-            access_token.client_id = decoded.get("aud")  # Use audience as client_id
-
-            return access_token
-
-        except InvalidTokenError as e:
+        except PyJWTError as e:
             logger.error(f"JWT verification failed: {e}")
             return None
+
+    def _extract_synapse_scopes(self, decoded: Dict[str, Any]) -> List[str]:
+        """
+        Extract scopes from Synapse's nested token structure.
+        
+        Synapse tokens store scopes in decoded['access']['scope'] rather than
+        the standard decoded['scope'] location. This is Synapse-specific.
+        """
+        scopes = []
+        
+        # Try Synapse's nested structure first
+        if 'access' in decoded and 'scope' in decoded['access']:
+            scopes = decoded['access']['scope']
+            logger.debug(f"Found scopes in Synapse nested structure: {scopes}")
+        # Fallback to standard OAuth scope location
+        elif 'scope' in decoded:
+            scope_str = decoded['scope']
+            scopes = scope_str.split(' ') if isinstance(scope_str, str) else scope_str
+            logger.debug(f"Found scopes in standard location: {scopes}")
+        
+        return scopes if isinstance(scopes, list) else []
+
+    def _validate_required_scopes(self, token_scopes: List[str]) -> bool:
+        """
+        Validate that the token contains all required scopes for our resource server (this MCP server)
+        """
+        if not self.required_scopes:
+            return True
+            
+        token_scope_set = set(token_scopes)
+        required_scope_set = set(self.required_scopes)
+        
+        has_required = required_scope_set.issubset(token_scope_set)
+        if not has_required:
+            missing = required_scope_set - token_scope_set
+            logger.warning(f"Missing required scopes: {missing}")
+            
+        return has_required
+
+    def _authenticate_synapse_client(self, token: str):
+        """
+        Configure the global Synapse client to use this access token.
+        
+        This is Synapse-specific functionality that allows subsequent
+        API calls to use the authenticated user's permissions.
+        """
+        try:
+            from synapse_mcp import authenticate_synapse_client
+            authenticate_synapse_client(token)
+            logger.debug("Successfully authenticated Synapse client")
+        except ImportError:
+            logger.warning("Could not import authenticate_synapse_client function")
         except Exception as e:
-            logger.error(f"Error in Synapse JWT verification: {e}")
-            return None
+            logger.error(f"Failed to authenticate Synapse client: {e}")
+
+    def _create_fastmcp_access_token(self, decoded: Dict[str, Any], 
+                                   scopes: List[str], token: str) -> SimpleNamespace:
+        """
+        Create a FastMCP-compatible access token object.
+        
+        FastMCP expects an object with specific attributes. We use SimpleNamespace
+        to create a lightweight object that mimics the expected structure.
+        
+        This custom format is necessary because:
+        1. FastMCP has specific expectations about access token object structure
+        2. We need to bridge between PyJWT's dict output and FastMCP's object expectations
+        3. We want to include Synapse-specific information (like nested scopes)
+        """
+        access_token = SimpleNamespace()
+        
+        # Standard OAuth/OIDC claims
+        access_token.sub = decoded.get("sub")  # Subject (user ID)
+        access_token.client_id = decoded.get("aud")  # Audience (OAuth client ID)
+        access_token.expires_at = decoded.get("exp", 0)  # Expiration timestamp
+        
+        # Scope information (enhanced for Synapse)
+        access_token.scopes = scopes
+        
+        # Full token information
+        access_token.claims = decoded  # All JWT claims for advanced use
+        access_token.token = token  # Raw token for API calls
+        
+        logger.debug(f"Created FastMCP access token for subject: {access_token.sub}")
+        return access_token
+
+    def __del__(self):
+        """Clean up thread pool executor."""
+        if hasattr(self, '_executor'):
+            self._executor.shutdown(wait=False)
 
 def create_oauth_proxy():
     """Create OAuth proxy for Synapse authentication."""
@@ -141,8 +230,7 @@ def create_oauth_proxy():
         required_scopes=["view", "download", "modify"]
     )
 
-    # Configure redirect path to match registered Synapse OAuth client
-    # FastMCP default is /auth/callback, but we need /oauth/callback to match registration
+    # FastMCP default is /auth/callback, but need /oauth/callback to match the original Synapse OAuth client registration
     redirect_path = "/oauth/callback"
 
     # Create OAuth proxy pointing to Synapse OAuth endpoints
