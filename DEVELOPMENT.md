@@ -1,10 +1,8 @@
 # Local Development Guide
 
-This guide provides instructions for setting up and running the Synapse MCP server in a local development environment. The server is built using FastMCP framework and supports both OAuth2 and PAT authentication.
+This guide provides instructions for setting up and running the Synapse MCP server in a local development environment. The server is built using FastMCP framework and is meant to support both PAT authentication (local server) and OAuth2 (remote server).
 
 ## Local Development Setup
-
-To set up the server for local development, follow these steps to install in editable mode.
 
 ```bash
 # 1. Clone the repository
@@ -25,12 +23,7 @@ The `-e` flag to install the package in "editable" mode, meaning any changes you
 
 ### Start server with HTTP transport for web development/testing
 
-The server supports two main authentication modes:
-
-- **PAT Authentication**: Setup for local development,
-- **OAuth2 Authentication**: Uses FastMCP's OAuth proxy for production-like testing,
-
-where the default is **stdio transport** for MCP client connections. For development, it is better to start server with `--http` flag (transport is streamable-http) and `--debug` to see detailed logs:
+Currently, the server default is **stdio transport** for local use. For development, it is better to start server with `--http` flag (transport is streamable-http) and `--debug` to see detailed logs:
 
 ```bash
 export SYNAPSE_PAT=$SYNAPSE_AUTH_TOKEN
