@@ -17,7 +17,7 @@ source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
 pip install --upgrade -e .
 ```
 
-The `-e` flag to install the package in "editable" mode, meaning any changes you make to the source code will be immediately effective. If you have previously installed the package, it is important to use the `--upgrade` flag to ensure the console script is properly generated.
+If you have previously installed the package, it is important to use the `--upgrade` flag to ensure the console script is properly generated.
 
 ## 1. Run the Server Locally
 
