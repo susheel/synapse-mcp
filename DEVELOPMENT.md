@@ -2,7 +2,7 @@
 
 This guide provides instructions for setting up and running the Synapse MCP server in a local development environment. The server is built using FastMCP framework and is meant to support both PAT authentication (local server) and OAuth2 (remote server).
 
-## Local Development Setup
+## 1. Local Setup
 
 ```bash
 # 1. Clone the repository
@@ -19,7 +19,7 @@ pip install --upgrade -e .
 
 If you have previously installed the package, it is important to use the `--upgrade` flag to ensure the console script is properly generated.
 
-## 1. Run the Server Locally
+## 2. Run the Server
 
 ### Start server with HTTP transport for web development/testing
 
@@ -45,7 +45,7 @@ export MCP_SERVER_URL="http://127.0.0.1:9000/mcp"
 synapse-mcp --http --debug
 ```
 
-### Add to local AI client like Claude Code
+### 3. Add to local AI client like Claude Code
 
 ```bash
 claude mcp add --transport http synapse -- http://127.0.0.1:9000/mcp
