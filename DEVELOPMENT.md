@@ -77,16 +77,16 @@ docker run -p 9000:9000 \
 docker run -p 9000:9000 \
   -e SYNAPSE_OAUTH_CLIENT_ID=$SYNAPSE_OAUTH_CLIENT_ID \
   -e SYNAPSE_OAUTH_CLIENT_SECRET=$SYNAPSE_OAUTH_CLIENT_SECRET \
-  -e SYNAPSE_OAUTH_REDIRECT_URI="http://localhost:9000/oauth/callback" \
-  -e MCP_SERVER_URL="http://localhost:9000/mcp" \
+  -e SYNAPSE_OAUTH_REDIRECT_URI="http://127.0.0.1:9000/oauth/callback" \
+  -e MCP_SERVER_URL="http://127.0.0.1:9000/mcp" \
   -e MCP_TRANSPORT="streamable-http" \
   synapse-mcp
 ```
 
 ### Fly.io
 
-> [!CAUTION]
-> This is a placeholder deployment option only. The remote version is not ready for deployment yet due to security issues.
+> [!WARNING]
+> These are placeholder deployment info and actual production deployment may change.
 
 The project is configured for easy deployment to [Fly.io](https://fly.io), a platform for running full-stack apps and databases close to your users.
 
@@ -107,7 +107,7 @@ The project is configured for easy deployment to [Fly.io](https://fly.io), a pla
 
 2.  **Launch the App**:
 
-    The `flyctl launch` command detects the `fly.toml` file, builds a new application, and deploys it. It will ask you to choose an app name (defaults to `synapse-research-mcp`) and a region.
+    The `flyctl launch` command detects the `fly.toml` file, builds a new application, and deploys it. It will ask you to choose an app name (defaults to `synapse-mcp`) and a region.
 
     ```bash
     flyctl launch
