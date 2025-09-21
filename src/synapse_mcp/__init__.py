@@ -129,11 +129,12 @@ def get_entity(entity_id: str, ctx: Context) -> Dict[str, Any]:
         return {'error': str(e), 'entity_id': entity_id}
 
 @mcp.tool()
-def get_entity_annotations(entity_id: str) -> Dict[str, Any]:
+def get_entity_annotations(entity_id: str, ctx: Context) -> Dict[str, Any]:
     """Get annotations for an entity.
 
     Args:
         entity_id: The Synapse ID of the entity
+        ctx: FastMCP context (automatically injected)
 
     Returns:
         The entity annotations as a dictionary
@@ -142,8 +143,6 @@ def get_entity_annotations(entity_id: str) -> Dict[str, Any]:
         return {'error': f'Invalid Synapse ID: {entity_id}'}
 
     try:
-        # Get current context from FastMCP context system
-        ctx = request_ctx.get()
         entity_ops = get_entity_operations(ctx)
         annotations = entity_ops['base'].get_entity_annotations(entity_id)
         return format_annotations(annotations)
@@ -153,12 +152,12 @@ def get_entity_annotations(entity_id: str) -> Dict[str, Any]:
         return {'error': str(e), 'entity_id': entity_id}
 
 @mcp.tool()
-def get_entity_children(entity_id: str) -> List[Dict[str, Any]]:
+def get_entity_children(entity_id: str, ctx: Context) -> List[Dict[str, Any]]:
     """Get child entities of a container entity.
 
     Args:
         entity_id: The Synapse ID of the container entity
-        ctx: Connection context for user isolation
+        ctx: FastMCP context (automatically injected)
 
     Returns:
         List of child entities
@@ -167,8 +166,6 @@ def get_entity_children(entity_id: str) -> List[Dict[str, Any]]:
         return [{'error': f'Invalid Synapse ID: {entity_id}'}]
 
     try:
-       # Get current context from FastMCP context system
-        ctx = request_ctx.get()
         entity_ops = get_entity_operations(ctx)
         # Determine the entity type
         entity = entity_ops['base'].get_entity_by_id(entity_id)
@@ -187,12 +184,12 @@ def get_entity_children(entity_id: str) -> List[Dict[str, Any]]:
 
 # Query Tools
 @mcp.tool()
-def search_entities(search_term: str, entity_type: Optional[str] = None, parent_id: Optional[str] = None) -> List[Dict[str, Any]]:
+def search_entities(search_term: str, ctx: Context, entity_type: Optional[str] = None, parent_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Search for Synapse entities.
 
     Args:
         search_term: Term to search for
-        ctx: Connection context for user isolation
+        ctx: FastMCP context (automatically injected)
         entity_type: Type of entity to search for (optional)
         parent_id: Parent entity ID to filter by (optional)
 
@@ -205,15 +202,15 @@ def search_entities(search_term: str, entity_type: Optional[str] = None, parent_
         params["entity_type"] = entity_type
     if parent_id:
         params["parent_id"] = parent_id
-    return query_entities(**params)
+    return query_entities(ctx, **params)
 
 @mcp.tool()
-def query_entities(entity_type: Optional[str] = None, parent_id: Optional[str] = None,
+def query_entities(ctx: Context, entity_type: Optional[str] = None, parent_id: Optional[str] = None,
                   name: Optional[str] = None, annotations: Optional[str] = None) -> List[Dict[str, Any]]:
     """Query entities based on various criteria.
 
     Args:
-        ctx: Connection context for user isolation
+        ctx: FastMCP context (automatically injected)
         entity_type: Type of entity to query (project, folder, file, table, dataset)
         parent_id: Parent entity ID to filter by
         name: Entity name to filter by
@@ -223,8 +220,6 @@ def query_entities(entity_type: Optional[str] = None, parent_id: Optional[str] =
         List of entities matching the query
     """
     try:
-       # Get current context from FastMCP context system
-        ctx = request_ctx.get()
         query_builder = get_query_builder(ctx)
         import json
         # Build query parameters
@@ -270,11 +265,11 @@ def query_table(table_id: str, query: str, ctx: Context) -> Dict[str, Any]:
         return {'error': str(e), 'table_id': table_id, 'query': query}
 
 @mcp.tool()
-def get_datasets_as_croissant() -> Dict[str, Any]:
+def get_datasets_as_croissant(ctx: Context) -> Dict[str, Any]:
     """Get public datasets in Croissant metadata format.
 
     Args:
-        ctx: Connection context for user isolation
+        ctx: FastMCP context (automatically injected)
 
     Returns:
         Datasets in Croissant metadata format
