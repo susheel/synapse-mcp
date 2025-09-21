@@ -103,7 +103,13 @@ class SynapseJWTVerifier:
 
             # Return FastMCP-compatible access token object
             # FastMCP expects a specific object structure with these attributes
-            return self._create_fastmcp_access_token(decoded, scopes, token)
+            access_token_obj = self._create_fastmcp_access_token(decoded, scopes, token)
+
+            # Store the raw token for connection-scoped authentication
+            # This will be available to the connection context
+            access_token_obj.raw_token = token
+
+            return access_token_obj
 
         except PyJWTError as e:
             logger.error(f"JWT verification failed: {e}")
@@ -149,19 +155,19 @@ class SynapseJWTVerifier:
 
     def _authenticate_synapse_client(self, token: str):
         """
-        Configure the global Synapse client to use this access token.
-        
-        This is Synapse-specific functionality that allows subsequent
-        API calls to use the authenticated user's permissions.
+        Store access token for per-connection authentication.
+
+        Note: This no longer configures a global client. Instead, the token
+        is made available to the connection-scoped authentication system.
         """
         try:
-            from synapse_mcp import authenticate_synapse_client
-            authenticate_synapse_client(token)
-            logger.debug("Successfully authenticated Synapse client")
-        except ImportError:
-            logger.warning("Could not import authenticate_synapse_client function")
+            # Store token for connection-scoped authentication
+            # The actual authentication will happen per-connection in connection_auth.py
+            logger.debug("Access token available for connection-scoped authentication")
+            # TODO: We may need to store this token in a way that's accessible
+            # to the connection context. This might require FastMCP middleware.
         except Exception as e:
-            logger.error(f"Failed to authenticate Synapse client: {e}")
+            logger.error(f"Failed to store access token: {e}")
 
     def _create_fastmcp_access_token(self, decoded: Dict[str, Any], 
                                    scopes: List[str], token: str) -> SimpleNamespace:
