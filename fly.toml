@@ -33,7 +33,7 @@ primary_region = 'sea'
     timeout = '5s'
     grace_period = '10s'
     method = 'GET'
-    path = '/mcp/info'
+    path = '/health'
 
 [[vm]]
   memory = '1gb'
