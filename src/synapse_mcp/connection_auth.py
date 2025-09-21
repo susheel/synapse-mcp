@@ -64,8 +64,8 @@ def _authenticate_client(client: synapseclient.Synapse, ctx: Context) -> bool:
     Authenticate a synapseclient instance using available credentials.
 
     Priority order:
-    1. OAuth access token from FastMCP auth context (production)
-    2. PAT from environment variable (development)
+    1. PAT from environment variable (development)
+    2. OAuth access token from FastMCP auth context (production)
     3. No authentication (public access only)
 
     Args:
@@ -76,22 +76,17 @@ def _authenticate_client(client: synapseclient.Synapse, ctx: Context) -> bool:
         bool: True if authentication succeeded, False otherwise
     """
     try:
-        # Try OAuth access token first (production mode)
-        if _try_oauth_authentication(client, ctx):
-            return True
-
-        # Fall back to PAT authentication (development mode)
+        # Try PAT authentication first (development mode)
         if _try_pat_authentication(client, ctx):
             return True
 
-        # No authentication available - public access only
-        logger.warning("No authentication credentials available - using anonymous access")
-        ctx.set_state(USER_AUTH_INFO_KEY, {
-            "method": "anonymous",
-            "user_id": None,
-            "scopes": ["public"]
-        })
-        return True
+        # Fall back to OAuth access token (production mode)
+        if _try_oauth_authentication(client, ctx):
+            return True
+
+        # No authentication available - fail securely
+        logger.error("No authentication credentials available - authentication required")
+        return False
 
     except Exception as e:
         logger.error(f"Authentication failed: {e}")
@@ -108,6 +103,13 @@ def _try_oauth_authentication(client: synapseclient.Synapse, ctx: Context) -> bo
         # FastMCP 2.0+ provides access token through context
         # The JWT verifier in auth.py should have stored the token
         access_token = ctx.get_state("oauth_access_token")
+        logger.debug(f"Retrieved OAuth access token from context: {'***' if access_token else 'None'}")
+
+        # Debug: check all context state keys
+        if hasattr(ctx, '_state'):
+            logger.debug(f"Context state keys: {list(ctx._state.keys()) if ctx._state else 'No state'}")
+        else:
+            logger.debug("Context has no _state attribute")
 
         # Fallback: try to get from auth context if available
         if not access_token:
@@ -127,11 +129,12 @@ def _try_oauth_authentication(client: synapseclient.Synapse, ctx: Context) -> bo
         profile = client.getUserProfile()
 
         # Store auth info in context
+        scopes = ctx.get_state("token_scopes")
         ctx.set_state(USER_AUTH_INFO_KEY, {
             "method": "oauth",
             "user_id": profile.get("ownerId"),
             "username": profile.get("userName"),
-            "scopes": ctx.get_state("token_scopes", [])
+            "scopes": scopes if scopes is not None else []
         })
 
         logger.info(f"OAuth authentication successful for user: {profile.get('userName')}")

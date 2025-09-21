@@ -223,6 +223,20 @@ def create_oauth_proxy():
     if server_url.endswith("/mcp"):
         server_url = server_url[:-4]
 
+    # Normalize localhost vs 127.0.0.1 to prevent OAuth redirect mismatches
+    if "localhost" in server_url:
+        server_url = server_url.replace("localhost", "127.0.0.1")
+        logger.info(f"Normalized server URL from localhost to 127.0.0.1: {server_url}")
+
+    # If redirect_uri is not set, auto-generate it from server_url
+    if not redirect_uri:
+        redirect_uri = f"{server_url}/oauth/callback"
+        logger.info(f"Auto-generated redirect URI: {redirect_uri}")
+    # Normalize redirect_uri as well
+    elif "localhost" in redirect_uri:
+        redirect_uri = redirect_uri.replace("localhost", "127.0.0.1")
+        logger.info(f"Normalized redirect URI from localhost to 127.0.0.1: {redirect_uri}")
+
     if not all([client_id, client_secret, redirect_uri]):
         print("OAuth configuration missing - running without authentication")
         return None

@@ -1,4 +1,5 @@
 from fastmcp import FastMCP, Context
+from fastmcp.server.context import request_ctx
 from typing import Dict, List, Any, Optional, Union
 import synapseclient
 import os
@@ -17,9 +18,13 @@ from .connection_auth import get_synapse_client, ConnectionAuthError
 
 # Create an MCP server with OAuth authentication
 from .auth import create_oauth_proxy
+from .auth_middleware import OAuthTokenMiddleware
 
 auth = create_oauth_proxy()
 mcp = FastMCP("Synapse MCP Server", auth=auth)
+
+# Register OAuth token middleware to bridge auth to connection context
+mcp.add_middleware(OAuthTokenMiddleware())
 
 # Connection-scoped operations: no more global state!
 # Each connection gets its own synapseclient and entity operations
@@ -84,14 +89,14 @@ def is_using_pat_auth():
     print("WARNING: is_using_pat_auth() is deprecated. Check user_auth_info from connection context.")
     return False
 
-# Entity Retrieval Tools
+# Entity Tools
 @mcp.tool()
 def get_entity(entity_id: str, ctx: Context) -> Dict[str, Any]:
     """Get a Synapse entity by ID.
 
     Args:
         entity_id: The Synapse ID of the entity
-        ctx: Connection context for user isolation
+        ctx: FastMCP context (automatically injected)
 
     Returns:
         The entity as a dictionary
@@ -108,12 +113,11 @@ def get_entity(entity_id: str, ctx: Context) -> Dict[str, Any]:
         return {'error': str(e), 'entity_id': entity_id}
 
 @mcp.tool()
-def get_entity_annotations(entity_id: str, ctx: Context) -> Dict[str, Any]:
+def get_entity_annotations(entity_id: str) -> Dict[str, Any]:
     """Get annotations for an entity.
 
     Args:
         entity_id: The Synapse ID of the entity
-        ctx: Connection context for user isolation
 
     Returns:
         The entity annotations as a dictionary
@@ -122,6 +126,8 @@ def get_entity_annotations(entity_id: str, ctx: Context) -> Dict[str, Any]:
         return {'error': f'Invalid Synapse ID: {entity_id}'}
 
     try:
+        # Get current context from FastMCP context system
+        ctx = request_ctx.get()
         entity_ops = get_entity_operations(ctx)
         annotations = entity_ops['base'].get_entity_annotations(entity_id)
         return format_annotations(annotations)
@@ -131,7 +137,7 @@ def get_entity_annotations(entity_id: str, ctx: Context) -> Dict[str, Any]:
         return {'error': str(e), 'entity_id': entity_id}
 
 @mcp.tool()
-def get_entity_children(entity_id: str, ctx: Context) -> List[Dict[str, Any]]:
+def get_entity_children(entity_id: str) -> List[Dict[str, Any]]:
     """Get child entities of a container entity.
 
     Args:
@@ -145,6 +151,8 @@ def get_entity_children(entity_id: str, ctx: Context) -> List[Dict[str, Any]]:
         return [{'error': f'Invalid Synapse ID: {entity_id}'}]
 
     try:
+       # Get current context from FastMCP context system
+        ctx = request_ctx.get()
         entity_ops = get_entity_operations(ctx)
         # Determine the entity type
         entity = entity_ops['base'].get_entity_by_id(entity_id)
@@ -163,7 +171,7 @@ def get_entity_children(entity_id: str, ctx: Context) -> List[Dict[str, Any]]:
 
 # Query Tools
 @mcp.tool()
-def search_entities(search_term: str, ctx: Context, entity_type: Optional[str] = None, parent_id: Optional[str] = None) -> List[Dict[str, Any]]:
+def search_entities(search_term: str, entity_type: Optional[str] = None, parent_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Search for Synapse entities.
 
     Args:
@@ -181,10 +189,10 @@ def search_entities(search_term: str, ctx: Context, entity_type: Optional[str] =
         params["entity_type"] = entity_type
     if parent_id:
         params["parent_id"] = parent_id
-    return query_entities(ctx=ctx, **params)
+    return query_entities(**params)
 
 @mcp.tool()
-def query_entities(ctx: Context, entity_type: Optional[str] = None, parent_id: Optional[str] = None,
+def query_entities(entity_type: Optional[str] = None, parent_id: Optional[str] = None,
                   name: Optional[str] = None, annotations: Optional[str] = None) -> List[Dict[str, Any]]:
     """Query entities based on various criteria.
 
@@ -199,6 +207,8 @@ def query_entities(ctx: Context, entity_type: Optional[str] = None, parent_id: O
         List of entities matching the query
     """
     try:
+       # Get current context from FastMCP context system
+        ctx = request_ctx.get()
         query_builder = get_query_builder(ctx)
         import json
         # Build query parameters
@@ -227,7 +237,7 @@ def query_table(table_id: str, query: str, ctx: Context) -> Dict[str, Any]:
     Args:
         table_id: The Synapse ID of the table
         query: SQL-like query string
-        ctx: Connection context for user isolation
+        ctx: FastMCP context (automatically injected)
 
     Returns:
         Query results
@@ -244,7 +254,7 @@ def query_table(table_id: str, query: str, ctx: Context) -> Dict[str, Any]:
         return {'error': str(e), 'table_id': table_id, 'query': query}
 
 @mcp.tool()
-def get_datasets_as_croissant(ctx: Context) -> Dict[str, Any]:
+def get_datasets_as_croissant() -> Dict[str, Any]:
     """Get public datasets in Croissant metadata format.
 
     Args:
@@ -254,7 +264,7 @@ def get_datasets_as_croissant(ctx: Context) -> Dict[str, Any]:
         Datasets in Croissant metadata format
     """
     table_id = "syn61609402"
-    query_result = query_table(table_id, f"SELECT * FROM {table_id}", ctx)
+    query_result = query_table(table_id, f"SELECT * FROM {table_id}")
     if 'error' in query_result:
         return query_result
     return convert_to_croissant(query_result)
@@ -262,49 +272,49 @@ def get_datasets_as_croissant(ctx: Context) -> Dict[str, Any]:
 
 # Entity Resources
 @mcp.resource("entities/{id_or_name}")
-def get_entity_by_id_or_name(id_or_name: str, ctx: Context) -> Dict[str, Any]:
+def get_entity_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
     """Get entity by ID or name."""
     # Check if it's a Synapse ID
     if validate_synapse_id(id_or_name):
-        return get_entity(id_or_name, ctx)
+        return get_entity(id_or_name)
     # Otherwise, search by name
-    results = query_entities(ctx=ctx, name=id_or_name)
+    results = query_entities( name=id_or_name)
     if results and not isinstance(results[0], dict) or not results[0].get('error'):
         return results[0]
     return {'error': f'Entity not found: {id_or_name}'}
 
 @mcp.resource("entities/{id}/annotations")
-def get_entity_annotations_resource(id: str, ctx: Context) -> Dict[str, Any]:
+def get_entity_annotations_resource(id: str) -> Dict[str, Any]:
     """Get entity annotations."""
-    return get_entity_annotations(id, ctx)
+    return get_entity_annotations(id)
 
 @mcp.resource("entities/{id}/children")
-def get_entity_children_resource(id: str, ctx: Context) -> List[Dict[str, Any]]:
+def get_entity_children_resource(id: str) -> List[Dict[str, Any]]:
     """Get entity children."""
-    return get_entity_children(id, ctx)
+    return get_entity_children(id)
 
 @mcp.resource("entities/{entity_type}")
-def query_entities_by_type(entity_type: str, ctx: Context) -> List[Dict[str, Any]]:
+def query_entities_by_type(entity_type: str) -> List[Dict[str, Any]]:
     """Query entities by type."""
-    return query_entities(ctx=ctx, entity_type=entity_type)
+    return query_entities( entity_type=entity_type)
 
 @mcp.resource("entities/parent/{parent_id}")
-def query_entities_by_parent(parent_id: str, ctx: Context) -> List[Dict[str, Any]]:
+def query_entities_by_parent(parent_id: str) -> List[Dict[str, Any]]:
     """Query entities by parent ID."""
-    return query_entities(ctx=ctx, parent_id=parent_id)
+    return query_entities( parent_id=parent_id)
 
 # Project Resources
 @mcp.resource("projects/{id_or_name}")
-def get_project_by_id_or_name(id_or_name: str, ctx: Context) -> Dict[str, Any]:
+def get_project_by_id_or_name(id_or_name: str) -> Dict[str, Any]:
     """Get project by ID or name."""
     # Check if it's a Synapse ID
     if validate_synapse_id(id_or_name):
-        entity = get_entity(id_or_name, ctx)
+        entity = get_entity(id_or_name)
         if entity.get('type') == 'Project':
             return entity
         return {'error': f'Entity is not a project: {id_or_name}'}
     # Otherwise, search by name
-    results = query_entities(ctx=ctx, name=id_or_name, entity_type='project')
+    results = query_entities( name=id_or_name, entity_type='project')
     if results and not isinstance(results[0], dict) or not results[0].get('error'):
         return results[0]
     return {'error': f'Project not found: {id_or_name}'}
