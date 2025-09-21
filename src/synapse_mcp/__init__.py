@@ -3,6 +3,9 @@ from fastmcp.server.context import request_ctx
 from typing import Dict, List, Any, Optional, Union
 import synapseclient
 import os
+from datetime import datetime
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from .entities import (
     BaseEntityOperations,
     ProjectOperations,
@@ -25,6 +28,19 @@ mcp = FastMCP("Synapse MCP Server", auth=auth)
 
 # Register OAuth token middleware to bridge auth to connection context
 mcp.add_middleware(OAuthTokenMiddleware())
+
+# Health endpoint for Kubernetes and monitoring systems
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request: Request) -> JSONResponse:
+    """Standard HTTP health check endpoint for Kubernetes and monitoring systems."""
+    return JSONResponse({
+        "status": "healthy",
+        "service": "synapse-mcp",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "version": "0.2.0",
+        "is_oauth_configured": bool(os.environ.get("SYNAPSE_OAUTH_CLIENT_ID") and
+                                   os.environ.get("SYNAPSE_OAUTH_CLIENT_SECRET"))
+    })
 
 # Connection-scoped operations: no more global state!
 # Each connection gets its own synapseclient and entity operations
