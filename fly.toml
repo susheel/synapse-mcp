@@ -1,4 +1,4 @@
-# fly.toml app configuration file generated for synapse-mcp on 2025-09-16T08:52:54-07:00
+# fly.toml app configuration file generated for synapse-mcp on 2025-09-21T16:51:25-07:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
@@ -14,13 +14,15 @@ primary_region = 'sea'
   MCP_SERVER_URL = 'https://synapse-mcp.fly.dev/mcp'
   MCP_TRANSPORT = 'streamable-http'
   PORT = '9000'
+  SYNAPSE_OAUTH_REDIRECT_URI='https://synapse-mcp.fly.dev/oauth/callback'
 
 [http_service]
   internal_port = 9000
   force_https = true
-  auto_stop_machines = 'stop'
+  auto_stop_machines = true
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
+  max_machines_running = 1
   processes = ['app']
 
   [http_service.concurrency]
