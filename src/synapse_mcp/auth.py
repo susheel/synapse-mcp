@@ -96,10 +96,7 @@ class SynapseJWTVerifier:
                 logger.warning(f"Token lacks required scopes: {self.required_scopes}")
                 return None
 
-            # Authenticate global Synapse client with this token
-            # This is Synapse-specific: we need to configure the synapseclient
-            # to use this token for subsequent API calls
-            self._authenticate_synapse_client(token)
+            # Token will be stored in context state by middleware for per-connection authentication
 
             # Return FastMCP-compatible access token object
             # FastMCP expects a specific object structure with these attributes
@@ -153,21 +150,6 @@ class SynapseJWTVerifier:
             
         return has_required
 
-    def _authenticate_synapse_client(self, token: str):
-        """
-        Store access token for per-connection authentication.
-
-        Note: This no longer configures a global client. Instead, the token
-        is made available to the connection-scoped authentication system.
-        """
-        try:
-            # Store token for connection-scoped authentication
-            # The actual authentication will happen per-connection in connection_auth.py
-            logger.debug("Access token available for connection-scoped authentication")
-            # TODO: We may need to store this token in a way that's accessible
-            # to the connection context. This might require FastMCP middleware.
-        except Exception as e:
-            logger.error(f"Failed to store access token: {e}")
 
     def _create_fastmcp_access_token(self, decoded: Dict[str, Any], 
                                    scopes: List[str], token: str) -> SimpleNamespace:
