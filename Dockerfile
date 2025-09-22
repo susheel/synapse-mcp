@@ -23,4 +23,4 @@ ENV HOST="0.0.0.0"
 ENV PORT="9000"
 
 # Command to run the server
-CMD ["python", "-m", "synapse_mcp"]
+CMD ["python", "-m", "synapse_mcp", "--debug"]
