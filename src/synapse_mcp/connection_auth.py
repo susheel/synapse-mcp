@@ -46,7 +46,7 @@ def get_synapse_client(ctx: Context) -> synapseclient.Synapse:
 
     # Create new client for this connection
     logger.info("Creating new synapseclient for connection")
-    client = synapseclient.Synapse()
+    client = synapseclient.Synapse(cache_client=False)
 
     # Authenticate the client
     if not _authenticate_client(client, ctx):
