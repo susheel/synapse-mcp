@@ -4,7 +4,7 @@ Tests for the Croissant metadata conversion functionality.
 """
 
 import unittest
-from src.synapse_mcp.entities.croissant import (
+from synapse_mcp.entities.croissant import (
     convert_to_croissant,
     create_dataset_entry,
     get_value_or_default
