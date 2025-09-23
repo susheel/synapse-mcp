@@ -6,66 +6,77 @@ Main entry point for running the Synapse MCP server.
 import argparse
 import logging
 import sys
-import uvicorn
 import os
-import importlib.util
 
 def main():
     """Run the Synapse MCP server."""
     parser = argparse.ArgumentParser(description="Run the Synapse MCP server")
-    parser.add_argument("--host", default="127.0.0.1", help="Host to bind to")
-    parser.add_argument("--port", type=int, default=9000, help="Port to listen on")
+    parser.add_argument("--host", help="Host to bind to (for HTTP transport)")
+    parser.add_argument("--port", type=int, help="Port to listen on (for HTTP transport)")
+    parser.add_argument("--http", action="store_true", help="Use HTTP transport instead of default stdio")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
-    
+
     # Configure logging
     log_level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    
+
+    # Determine transport mode
+    transport_env = os.environ.get("MCP_TRANSPORT", "").lower()
+
+    # Determine the actual transport to use
+    if args.http or transport_env in ["sse", "streamable-http"]:
+        if transport_env == "sse":
+            transport = "sse"
+        else:
+            transport = "streamable-http"
+        use_http = True
+    elif transport_env == "stdio":
+        transport = "stdio"
+        use_http = False
+    else:
+        # Default to stdio for MCP clients
+        transport = "stdio"
+        use_http = False
+
     # Log server information
     logger = logging.getLogger("synapse_mcp")
-    logger.info(f"Starting Synapse MCP server on {args.host}:{args.port}")
+    if use_http:
+        host = args.host or os.environ.get("HOST", "127.0.0.1")
+        port = args.port or int(os.environ.get("PORT", "9000"))
+        logger.info(f"Starting Synapse MCP server on {host}:{port} with {transport} transport")
+    else:
+        logger.info("Starting Synapse MCP server with STDIO transport")
 
-    # Determine the path to the server.py file
-    # First check if it's in the current directory
-    if os.path.exists("server.py"):
-        server_path = "server.py"
-    else:
-        # Otherwise use the one from the package
-        package_dir = os.path.dirname(os.path.abspath(__file__))
-        server_path = os.path.join(os.path.dirname(package_dir), "server.py")
-    
-    # Import the server module
-    if os.path.exists(server_path):
-        spec = importlib.util.spec_from_file_location("server", server_path)
-        if spec and spec.loader:
-            server = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(server)
-            
-            # Run the server using uvicorn
-            try:
-                # Use uvicorn to run the FastAPI app
-                uvicorn.run(
-                    server.app,
-                    host=args.host,
-                    port=args.port,
-                    reload=args.debug
-                )
-                
-                logger.info("Server stopped")
-            except KeyboardInterrupt:
-                logger.info("Server stopped by user")
-            except Exception as e:
-                logger.error(f"Error running server: {e}")
-                sys.exit(1)
+    # Import after environment is set up
+    from synapse_mcp import mcp
+    from synapse_mcp.server import initialize_server
+
+    # Initialize server authentication
+    initialize_server()
+
+    # Use FastMCP's built-in server runner
+    try:
+        logger.info("Running FastMCP server")
+        # Only set HOST/PORT for HTTP transports
+        if use_http:
+            os.environ["HOST"] = args.host or os.environ.get("HOST", "127.0.0.1")
+            os.environ["PORT"] = str(args.port or int(os.environ.get("PORT", "9000")))
+
+        if use_http:
+            host = args.host or os.environ.get("HOST", "127.0.0.1")
+            port = args.port or int(os.environ.get("PORT", "9000"))
+            mcp.run(transport=transport, host=host, port=port)
         else:
-            logger.error(f"Failed to load server module from {server_path}")
-            sys.exit(1)
-    else:
-        logger.error(f"Server file not found at {server_path}")
+            mcp.run(transport=transport)
+        logger.info("Server stopped")
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user")
+    except Exception as e:
+        logger.error(f"Error running server: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

@@ -1,109 +1,64 @@
-#!/usr/bin/env python3
-"""
-Tests for the authentication functionality.
-"""
+"""Tests for OAuth proxy configuration behavior."""
 
-import unittest
-from unittest.mock import MagicMock, patch
-from synapse_mcp.auth import SynapseAuth
+import importlib
 
-class TestSynapseAuth(unittest.TestCase):
-    """Test the Synapse authentication functionality."""
+import pytest
 
-    def setUp(self):
-        """Set up test fixtures."""
-        self.auth = SynapseAuth()
-        
-    @patch('synapseclient.Synapse')
-    def test_authenticate_with_token(self, mock_synapse):
-        """Test authentication with a token."""
-        # Setup mock
-        mock_instance = MagicMock()
-        mock_synapse.return_value = mock_instance
-        
-        # Call the method
-        self.auth.authenticate(auth_token="fake_token")
-        
-        # Assert
-        mock_instance.login.assert_called_once_with(authToken="fake_token")
-        self.assertIsNotNone(self.auth.synapse_client)
-        
-    @patch('synapseclient.Synapse')
-    def test_authenticate_without_token(self, mock_synapse):
-        """Test authentication without a token."""
-        # Setup mock
-        mock_instance = MagicMock()
-        mock_synapse.return_value = mock_instance
-        
-        # Call the method and assert it raises
-        with self.assertRaises(ValueError):
-            self.auth.authenticate(auth_token=None)
-            
-    @patch('synapseclient.Synapse')
-    def test_get_client_authenticated(self, mock_synapse):
-        """Test getting client when authenticated."""
-        # Setup mock
-        mock_instance = MagicMock()
-        mock_synapse.return_value = mock_instance
-        
-        # Authenticate
-        self.auth.authenticate(auth_token="fake_token")
-        
-        # Get client
-        client = self.auth.get_client()
-        
-        # Assert
-        self.assertEqual(client, mock_instance)
-        mock_instance.getUserProfile.assert_called_once()
-        
-    def test_get_client_not_authenticated(self):
-        """Test getting client when not authenticated."""
-        # Call the method and assert it raises
-        with self.assertRaises(RuntimeError):
-            self.auth.get_client()
-            
-    @patch('synapseclient.Synapse')
-    def test_is_authenticated_true(self, mock_synapse):
-        """Test is_authenticated when authenticated."""
-        # Setup mock
-        mock_instance = MagicMock()
-        mock_synapse.return_value = mock_instance
-        
-        # Authenticate
-        self.auth.authenticate(auth_token="fake_token")
-        
-        # Check authentication
-        is_auth = self.auth.is_authenticated()
-        
-        # Assert
-        self.assertTrue(is_auth)
-        mock_instance.getUserProfile.assert_called_once()
-        
-    @patch('synapseclient.Synapse')
-    def test_is_authenticated_false_exception(self, mock_synapse):
-        """Test is_authenticated when getUserProfile raises exception."""
-        # Setup mock
-        mock_instance = MagicMock()
-        mock_instance.getUserProfile.side_effect = Exception("Not authenticated")
-        mock_synapse.return_value = mock_instance
-        
-        # Authenticate
-        self.auth.authenticate(auth_token="fake_token")
-        
-        # Check authentication
-        is_auth = self.auth.is_authenticated()
-        
-        # Assert
-        self.assertFalse(is_auth)
-        mock_instance.getUserProfile.assert_called_once()
-        
-    def test_is_authenticated_false_no_client(self):
-        """Test is_authenticated when no client."""
-        # Check authentication
-        is_auth = self.auth.is_authenticated()
-        
-        # Assert
-        self.assertFalse(is_auth)
+auth_module = importlib.import_module("synapse_mcp.oauth")
 
-if __name__ == "__main__":
-    unittest.main()
+
+@pytest.fixture(autouse=True)
+def clear_env(monkeypatch):
+    monkeypatch.delenv("SYNAPSE_PAT", raising=False)
+    monkeypatch.delenv("SYNAPSE_OAUTH_CLIENT_ID", raising=False)
+    monkeypatch.delenv("SYNAPSE_OAUTH_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("SYNAPSE_OAUTH_REDIRECT_URI", raising=False)
+    monkeypatch.delenv("MCP_SERVER_URL", raising=False)
+    monkeypatch.delenv("REDIS_URL", raising=False)
+
+
+def test_create_oauth_proxy_skips_when_pat(monkeypatch):
+    monkeypatch.setenv("SYNAPSE_PAT", "fake-token")
+
+    assert auth_module.create_oauth_proxy() is None
+
+
+def test_create_oauth_proxy_returns_none_when_config_missing():
+    assert auth_module.create_oauth_proxy() is None
+
+
+def test_create_oauth_proxy_initializes_session_aware_proxy(monkeypatch):
+    monkeypatch.setenv("SYNAPSE_OAUTH_CLIENT_ID", "client")
+    monkeypatch.setenv("SYNAPSE_OAUTH_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("MCP_SERVER_URL", "http://127.0.0.1:9000/mcp")
+
+    captured = {}
+
+    def fake_verifier(*args, **kwargs):
+        captured['verifier'] = {'args': args, 'kwargs': kwargs}
+        return object()
+
+    def fake_proxy(*args, **kwargs):
+        captured['proxy'] = {'args': args, 'kwargs': kwargs}
+        return "proxy"
+
+    factory_module = importlib.import_module("synapse_mcp.oauth.factory")
+
+    monkeypatch.setattr(factory_module, "SynapseJWTVerifier", fake_verifier)
+    monkeypatch.setattr(factory_module, "SessionAwareOAuthProxy", fake_proxy)
+
+    monkeypatch.setattr(auth_module, "SynapseJWTVerifier", fake_verifier)
+    monkeypatch.setattr(auth_module, "SessionAwareOAuthProxy", fake_proxy)
+
+    result = auth_module.create_oauth_proxy()
+
+    assert result == "proxy"
+
+    verifier_call = captured['verifier']
+    assert verifier_call['kwargs']['audience'] == "client"
+
+    proxy_call = captured['proxy']
+    assert proxy_call['kwargs']['base_url'] == "http://127.0.0.1:9000"
+    assert proxy_call['kwargs']['redirect_path'] == "/oauth/callback"
+    assert proxy_call['kwargs']['upstream_client_id'] == "client"
+    assert proxy_call['kwargs']['upstream_client_secret'] == "secret"

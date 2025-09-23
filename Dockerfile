@@ -2,6 +2,13 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+# Install system dependencies for cryptographic libraries
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libffi-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy the project files
 COPY . .
 
@@ -14,8 +21,6 @@ EXPOSE 9000
 # Set environment variables
 ENV HOST="0.0.0.0"
 ENV PORT="9000"
-ENV MCP_TRANSPORT="sse"
-ENV MCP_SERVER_URL="mcp://127.0.0.1:9000"
 
 # Command to run the server
-CMD ["python", "server.py", "--host", "0.0.0.0", "--port", "9000"]
+CMD ["python", "-m", "synapse_mcp", "--debug"]
