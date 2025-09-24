@@ -37,22 +37,35 @@ def test_get_entity_resource_uses_context(monkeypatch):
     assert result == {'id': 'syn123', 'type': 'Project'}
 
 
-def test_get_datasets_as_croissant_uses_query_table_context(monkeypatch):
+def test_get_entity_resource_uses_search(monkeypatch):
     ctx = DummyContext()
+    token = request_ctx.set(ctx)
+
     captured = {}
 
-    def fake_query_table(table_id, query, ctx_arg):
-        captured['args'] = (table_id, query, ctx_arg)
-        return {'data': []}
+    def fake_search(ctx_arg, **kwargs):
+        captured['ctx'] = ctx_arg
+        captured['kwargs'] = kwargs
+        return {
+            'found': 1,
+            'start': 0,
+            'hits': [{'id': 'syn999', 'name': 'Example Entity', 'node_type': 'project'}],
+            'facets': [],
+            'query': kwargs,
+        }
 
-    monkeypatch.setattr(synapse_mcp.query_table, 'fn', fake_query_table)
-    import synapse_mcp.tools as tools
-    monkeypatch.setattr(tools, 'convert_to_croissant', lambda payload: payload)
+    def fake_get_entity(entity_id, ctx_arg):
+        assert ctx_arg is ctx
+        return {'id': entity_id, 'name': 'Example Entity', 'type': 'Project'}
 
-    result = synapse_mcp.get_datasets_as_croissant.fn(ctx)
+    monkeypatch.setattr(synapse_mcp.search_synapse, 'fn', fake_search)
+    monkeypatch.setattr(synapse_mcp.get_entity, 'fn', fake_get_entity)
 
-    assert result == {'data': []}
-    table_id, query, ctx_arg = captured['args']
-    assert table_id == 'syn61609402'
-    assert 'SELECT * FROM syn61609402' in query
-    assert ctx_arg is ctx
+    try:
+        result = synapse_mcp.get_entity_by_id_or_name.fn('Example Entity')
+    finally:
+        request_ctx.reset(token)
+
+    assert result == {'id': 'syn999', 'name': 'Example Entity', 'type': 'Project'}
+    assert captured['ctx'] is ctx
+    assert captured['kwargs']['name'] == 'Example Entity'

@@ -1,7 +1,4 @@
 import unittest
-from synapse_mcp.entities.croissant import convert_to_croissant
-
-
 import importlib.util
 import os
 import sys
@@ -18,16 +15,11 @@ class TestPackageInstallation(unittest.TestCase):
         # Test submodules
         from synapse_mcp import auth
         self.assertTrue(auth is None or hasattr(auth, "authorize"))
-        
-        from synapse_mcp import query
-        self.assertIsNotNone(query)
-        
         from synapse_mcp import utils
         self.assertIsNotNone(utils)
         
-        from synapse_mcp.entities import croissant
-        self.assertIsNotNone(croissant)
-        
+        from synapse_mcp import search_synapse
+        self.assertTrue(hasattr(search_synapse, "fn"))
         # Test entities subpackage
         from synapse_mcp.entities import base
         self.assertIsNotNone(base)

@@ -111,12 +111,16 @@ def main():
     for child in children:
         print(f"- {child.get('name', 'Unknown')} ({child.get('id', 'Unknown')})")
     
-    # Example 4: Query for files in the project
-    print("\nQuerying for files...")
-    files = client.use_tool("query_entities", {"entity_type": "file"})
-    print(f"Found {len(files)} files")
-    for file in files:
-        print(f"- {file.get('name', 'Unknown')} ({file.get('id', 'Unknown')})")
+    # Example 4: Search for files in the project
+    print("\nSearching for files...")
+    search_response = client.use_tool(
+        "search_synapse",
+        {"entity_type": "file", "query_term": project_id, "limit": 5},
+    )
+    hits = search_response.get("hits", []) if isinstance(search_response, dict) else []
+    print(f"Found {search_response.get('found', 0)} matching files (showing {len(hits)})")
+    for hit in hits:
+        print(f"- {hit.get('name', 'Unknown')} ({hit.get('id', 'Unknown')})")
     
     # Example 5: Query a table (if available)
     # Replace with a real Synapse table ID

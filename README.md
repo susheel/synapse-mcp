@@ -7,9 +7,8 @@ You (your AI agent) can:
 - Retrieve entities by name
 - Get entity annotations
 - Get entity children
-- Query entities based on various criteria
+- Search Synapse entities with path and type filters
 - Query Synapse tables
-- Get datasets in Croissant metadata format
 
 ## Usage
 
