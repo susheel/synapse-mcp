@@ -25,7 +25,7 @@ def create_oauth_proxy(env: Optional[dict[str, str]] = None):
         issuer="https://repo-prod.prod.sagebase.org/auth/v1",
         audience=settings.client_id,
         algorithm="RS256",
-        required_scopes=["view", "download", "modify"],
+        required_scopes=["openid", "view"],
     )
 
     auth = SessionAwareOAuthProxy(
