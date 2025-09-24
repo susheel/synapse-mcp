@@ -1,7 +1,7 @@
 [project]
 name = "synapse-mcp"
 version = "0.2.0"
-description = "A Model Context Protocol (MCP) server that exposes Synapse Entities with Croissant metadata support"
+description = "A Model Context Protocol (MCP) server that exposes Synapse entities and utilities"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}

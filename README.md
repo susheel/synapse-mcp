@@ -9,7 +9,6 @@ You (your AI agent) can:
 - Get entity children
 - Query entities based on various criteria
 - Query Synapse tables
-- Get datasets in Croissant metadata format
 
 ## Usage
 
