@@ -1,11 +1,11 @@
 """Tests for the session-aware OAuth proxy."""
 
+import json
 from types import SimpleNamespace
 import sys
 
 import pytest
-
-from fastmcp.server.auth.oauth_proxy import OAuthProxy
+from fastmcp.server.auth.oauth_proxy import OAuthClientInformationFull, OAuthProxy
 
 from synapse_mcp.oauth.proxy import SessionAwareOAuthProxy
 
@@ -16,6 +16,20 @@ pytestmark = pytest.mark.anyio("asyncio")
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+class FakeRegistry:
+    def __init__(self):
+        self.records = {}
+
+    def load_all(self):
+        return list(self.records.values())
+
+    def save(self, registration):
+        self.records[registration.client_id] = registration
+
+    def remove(self, client_id):
+        self.records.pop(client_id, None)
 
 
 class FakeStorage:
@@ -48,8 +62,10 @@ class FakeStorage:
         return None
 
 
-def build_proxy(monkeypatch, storage):
+def build_proxy(monkeypatch, storage, registry: FakeRegistry | None = None):
     monkeypatch.setattr("synapse_mcp.oauth.proxy.create_session_storage", lambda: storage)
+    if registry is not None:
+        monkeypatch.setattr("synapse_mcp.oauth.proxy.create_client_registry", lambda: registry)
     return SessionAwareOAuthProxy(
         upstream_authorization_endpoint="https://auth",
         upstream_token_endpoint="https://token",
@@ -64,7 +80,7 @@ def build_proxy(monkeypatch, storage):
 @pytest.mark.anyio
 async def test_map_new_tokens_populates_storage(monkeypatch):
     storage = FakeStorage()
-    proxy = build_proxy(monkeypatch, storage)
+    proxy = build_proxy(monkeypatch, storage, FakeRegistry())
     proxy._access_tokens = {"token123": object()}
 
     dummy_jwt = SimpleNamespace(decode=lambda token, options=None: {"sub": "user-1"})
@@ -79,7 +95,7 @@ async def test_map_new_tokens_populates_storage(monkeypatch):
 async def test_get_token_for_current_user(monkeypatch):
     storage = FakeStorage()
     storage.tokens["user-1"] = "token123"
-    proxy = build_proxy(monkeypatch, storage)
+    proxy = build_proxy(monkeypatch, storage, FakeRegistry())
 
     result = await proxy.get_token_for_current_user()
     assert result == ("token123", "user-1")
@@ -90,7 +106,7 @@ async def test_get_token_for_current_user(monkeypatch):
 async def test_get_token_for_session(monkeypatch):
     storage = FakeStorage()
     storage.tokens["user-1"] = "token123"
-    proxy = build_proxy(monkeypatch, storage)
+    proxy = build_proxy(monkeypatch, storage, FakeRegistry())
     proxy._session_tokens["session-1"] = ("token123", "user-1")
 
     result = await proxy.get_token_for_session("session-1")
@@ -101,7 +117,7 @@ async def test_get_token_for_session(monkeypatch):
 async def test_cleanup_expired_tokens_removes_orphans(monkeypatch):
     storage = FakeStorage()
     storage.tokens["user-1"] = "token123"
-    proxy = build_proxy(monkeypatch, storage)
+    proxy = build_proxy(monkeypatch, storage, FakeRegistry())
 
     proxy._access_tokens = {"token123": object(), "token999": object()}
     monkeypatch.setattr(SessionAwareOAuthProxy, "_is_token_old_enough_to_cleanup", lambda self, token: True)
@@ -115,7 +131,7 @@ async def test_cleanup_expired_tokens_removes_orphans(monkeypatch):
 @pytest.mark.anyio
 async def test_handle_callback_tracks_new_codes(monkeypatch):
     storage = FakeStorage()
-    proxy = build_proxy(monkeypatch, storage)
+    proxy = build_proxy(monkeypatch, storage, FakeRegistry())
     proxy._client_codes["existing"] = {"idp_tokens": {}}
 
     async def fake_handle(self, request, *args, **kwargs):
@@ -138,7 +154,7 @@ async def test_handle_callback_tracks_new_codes(monkeypatch):
 @pytest.mark.anyio
 async def test_exchange_binds_session_and_storage(monkeypatch):
     storage = FakeStorage()
-    proxy = build_proxy(monkeypatch, storage)
+    proxy = build_proxy(monkeypatch, storage, FakeRegistry())
     proxy._code_sessions["code-1"] = "session-xyz"
 
     dummy_jwt = SimpleNamespace(decode=lambda token, options=None: {"sub": "user-1"})
@@ -167,7 +183,7 @@ async def test_exchange_binds_session_and_storage(monkeypatch):
 async def test_exchange_fallback_uses_existing_token(monkeypatch):
     storage = FakeStorage()
     storage.tokens["user-99"] = "tokenABC"
-    proxy = build_proxy(monkeypatch, storage)
+    proxy = build_proxy(monkeypatch, storage, FakeRegistry())
     proxy._code_sessions["code-2"] = "session-abc"
     proxy._access_tokens["tokenABC"] = SimpleNamespace(client_id="client-77", scopes=["download"], expires_at=0)
 
@@ -185,3 +201,47 @@ async def test_exchange_fallback_uses_existing_token(monkeypatch):
     assert result.access_token == "tokenABC"
     assert proxy._code_sessions == {}
     assert proxy._session_tokens["session-abc"] == ("tokenABC", "user-99")
+
+
+@pytest.mark.anyio
+async def test_client_registry_persists_across_instances(monkeypatch, tmp_path):
+    registry_path = tmp_path / "clients.json"
+    monkeypatch.setenv("SYNAPSE_MCP_CLIENT_REGISTRY_PATH", str(registry_path))
+
+    storage = FakeStorage()
+    proxy = build_proxy(monkeypatch, storage)
+
+    client_info = OAuthClientInformationFull(
+        client_id="client-xyz",
+        client_secret="secret",
+        redirect_uris=["http://127.0.0.1:5000/callback"],
+        grant_types=["authorization_code"],
+    )
+
+    await proxy.register_client(client_info)
+
+    saved = json.loads(registry_path.read_text())
+    assert "client-xyz" in saved
+
+    new_storage = FakeStorage()
+    new_proxy = build_proxy(monkeypatch, new_storage)
+
+    assert "client-xyz" in new_proxy._clients
+
+
+@pytest.mark.anyio
+async def test_static_clients_loaded_from_env(monkeypatch):
+    payload = json.dumps(
+        [
+            {
+                "client_id": "static-client",
+                "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+            }
+        ]
+    )
+    monkeypatch.setenv("SYNAPSE_MCP_STATIC_CLIENTS", payload)
+
+    storage = FakeStorage()
+    proxy = build_proxy(monkeypatch, storage, FakeRegistry())
+
+    assert "static-client" in proxy._clients

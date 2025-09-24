@@ -1,11 +1,18 @@
 """FastMCP OAuth proxy extensions for Synapse."""
 
 import logging
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from fastmcp.server.auth import OAuthProxy
+from fastmcp.server.auth.oauth_proxy import ProxyDCRClient
+from pydantic import AnyUrl, TypeAdapter
 
 from ..session_storage import create_session_storage
+from .client_registry import (
+    ClientRegistration,
+    create_client_registry,
+    load_static_registrations,
+)
 
 logger = logging.getLogger("synapse_mcp.oauth")
 
@@ -18,7 +25,64 @@ class SessionAwareOAuthProxy(OAuthProxy):
         self._session_storage = create_session_storage()
         self._session_tokens: dict[str, tuple[str, Optional[str]]] = {}
         self._code_sessions: dict[str, str] = {}
-        logger.debug("SessionAwareOAuthProxy initialized with session storage %s", type(self._session_storage).__name__)
+        self._client_registry = create_client_registry()
+        self._restore_registered_clients()
+        logger.debug(
+            "SessionAwareOAuthProxy initialized with session storage %s and client registry %s",
+            type(self._session_storage).__name__,
+            type(self._client_registry).__name__,
+        )
+
+    def _restore_registered_clients(self) -> None:
+        try:
+            registrations = list(self._client_registry.load_all())
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to load persisted OAuth clients: %s", exc)
+            return
+
+        # Merge statically configured clients (highest priority)
+        try:
+            registrations.extend(load_static_registrations())
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to load static OAuth clients: %s", exc)
+
+        default_grants = ["authorization_code", "refresh_token"]
+
+        for record in registrations:
+            if record.client_id in self._clients:
+                continue
+            try:
+                adapter = TypeAdapter(List[AnyUrl])
+                redirect_source = record.redirect_uris if record.redirect_uris else ["http://127.0.0.1"]
+                redirect_uris = adapter.validate_python(redirect_source)
+                proxy_client = ProxyDCRClient(
+                    client_id=record.client_id,
+                    client_secret=record.client_secret,
+                    redirect_uris=redirect_uris,
+                    grant_types=record.grant_types or default_grants,
+                    scope=self._default_scope_str,
+                    token_endpoint_auth_method="none",
+                    allowed_redirect_uri_patterns=self._allowed_client_redirect_uris,
+                )
+                self._clients[record.client_id] = proxy_client
+                logger.info("Restored registered OAuth client %s", record.client_id)
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning("Failed to restore OAuth client %s: %s", record.client_id, exc)
+
+    async def register_client(self, client_info):
+        await super().register_client(client_info)
+
+        try:
+            registration = ClientRegistration(
+                client_id=client_info.client_id,
+                client_secret=_extract_secret(client_info.client_secret),
+                redirect_uris=[str(uri) for uri in (client_info.redirect_uris or [])],
+                grant_types=list(client_info.grant_types or ["authorization_code", "refresh_token"]),
+            )
+            self._client_registry.save(registration)
+            logger.debug("Persisted OAuth client %s", client_info.client_id)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Unable to persist OAuth client %s: %s", client_info.client_id, exc)
 
     async def _handle_idp_callback(self, request, *args, **kwargs):
         session_id = _extract_session_id(request)
@@ -229,6 +293,15 @@ def _extract_session_id(request) -> Optional[str]:
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("Could not extract session ID from callback: %s", exc)
     return None
+
+
+def _extract_secret(secret: Any) -> Optional[str]:
+    if secret is None:
+        return None
+    try:
+        return secret.get_secret_value()  # type: ignore[attr-defined]
+    except AttributeError:
+        return secret  # type: ignore[return-value]
 
 
 def _mask_token(token: Optional[str]) -> Optional[str]:
