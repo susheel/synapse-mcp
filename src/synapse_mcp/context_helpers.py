@@ -14,7 +14,6 @@ from .entities import (
     ProjectOperations,
     TableOperations,
 )
-from .query import QueryBuilder
 
 
 def get_request_context() -> Optional[Context]:
@@ -66,24 +65,10 @@ def get_entity_operations(ctx: Context) -> Dict[str, Any]:
     return entity_ops
 
 
-def get_query_builder(ctx: Context) -> QueryBuilder:
-    """Get query builder for this connection's synapseclient."""
-    synapse_client = get_synapse_client(ctx)
-
-    query_builder = ctx.get_state("query_builder")
-    if query_builder:
-        return query_builder
-
-    query_builder = QueryBuilder(synapse_client)
-    ctx.set_state("query_builder", query_builder)
-    return query_builder
-
-
 __all__ = [
     "ConnectionAuthError",
     "first_successful_result",
     "get_entity_operations",
-    "get_query_builder",
     "get_request_context",
     "require_request_context",
 ]

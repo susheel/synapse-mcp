@@ -6,7 +6,6 @@ from .context_helpers import (
     ConnectionAuthError,
     first_successful_result,
     get_entity_operations,
-    get_query_builder,
     get_request_context,
     require_request_context,
 )
@@ -42,9 +41,8 @@ from .tools import (
     get_entity,
     get_entity_annotations,
     get_entity_children,
-    query_entities,
     query_table,
-    search_entities,
+    search_synapse,
 )
 
 # Deprecated legacy helpers preserved for API compatibility
@@ -102,7 +100,6 @@ __all__ = [
     "get_project_children",
     "get_project_parent",
     "get_synapse_client",
-    "get_query_builder",
     "get_request_context",
     "get_table_annotations",
     "get_table_by_id_or_name",
@@ -114,11 +111,10 @@ __all__ = [
     "is_authenticated",
     "is_using_pat_auth",
     "mcp",
-    "query_entities",
     "query_entities_by_parent",
     "query_entities_by_type",
     "query_table",
     "query_table_resource",
     "require_request_context",
-    "search_entities",
+    "search_synapse",
 ]

@@ -1,11 +1,13 @@
 """Tool registrations for Synapse MCP."""
 
+import json
 from typing import Any, Dict, List, Optional
 
 from fastmcp import Context
 
 from .app import mcp
-from .context_helpers import ConnectionAuthError, get_entity_operations, get_query_builder
+from .connection_auth import get_synapse_client
+from .context_helpers import ConnectionAuthError, get_entity_operations
 from .utils import format_annotations, validate_synapse_id
 
 
@@ -63,57 +65,82 @@ def get_entity_children(entity_id: str, ctx: Context) -> List[Dict[str, Any]]:
 
 
 @mcp.tool()
-def search_entities(
-    search_term: str,
+def search_synapse(
     ctx: Context,
-    entity_type: Optional[str] = None,
-    parent_id: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    """Search for Synapse entities."""
-    params = {"name": search_term}
-    if entity_type:
-        params["entity_type"] = entity_type
-    if parent_id:
-        params["parent_id"] = parent_id
-    return query_entities(ctx, **params)
-
-
-@mcp.tool()
-def query_entities(
-    ctx: Context,
-    entity_type: Optional[str] = None,
-    parent_id: Optional[str] = None,
+    query_term: Optional[str] = None,
     name: Optional[str] = None,
-    annotations: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    """Query entities based on various criteria."""
+    entity_type: Optional[str] = None,
+    entity_types: Optional[List[str]] = None,
+    parent_id: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0,
+    return_fields: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Execute a Synapse search using the public search endpoint."""
     try:
-        query_builder = get_query_builder(ctx)
-        import json
-
-        params: Dict[str, Any] = {}
-        if entity_type:
-            params["entity_type"] = entity_type
-        if parent_id:
-            params["parent_id"] = parent_id
-        if name:
-            params["name"] = name
-        if annotations:
-            params["annotations"] = json.loads(annotations)
-
-        query = query_builder.build_combined_query(params)
-        return query_builder.execute_query(query)
+        synapse_client = get_synapse_client(ctx)
     except ConnectionAuthError as exc:
-        return [{"error": f"Authentication required: {exc}"}]
-    except Exception as exc:
-        error_params = {
-            "entity_type": entity_type,
-            "parent_id": parent_id,
-            "name": name,
-            "annotations": annotations,
-        }
-        sanitized_params = {key: value for key, value in error_params.items() if value is not None}
-        return [{"error": str(exc), "params": sanitized_params}]
+        return {"error": f"Authentication required: {exc}"}
+
+    sanitized_limit = max(0, min(limit, 100))
+    sanitized_offset = max(0, offset)
+
+    query_terms: List[str] = []
+    if query_term:
+        query_terms.append(query_term)
+    if name and name not in query_terms:
+        query_terms.append(name)
+
+    request_payload: Dict[str, Any] = {
+        "queryTerm": query_terms,
+        "start": sanitized_offset,
+        "size": sanitized_limit,
+        "returnFields": return_fields
+        or [
+            "id",
+            "name",
+            "description",
+            "node_type",
+            "path",
+            "created_on",
+            "modified_on",
+            "created_by",
+        ],
+    }
+
+    requested_types: List[str] = []
+    if entity_types:
+        requested_types.extend(entity_types)
+    if entity_type:
+        requested_types.append(entity_type)
+
+    boolean_query: List[Dict[str, Any]] = []
+    for item in requested_types:
+        normalized = (item or "").strip().lower()
+        if not normalized:
+            continue
+        boolean_query.append({"key": "node_type", "value": normalized})
+
+    if parent_id:
+        boolean_query.append({"key": "path", "value": parent_id})
+
+    if boolean_query:
+        request_payload["booleanQuery"] = boolean_query
+
+    try:
+        response = synapse_client.restPOST("/search", body=json.dumps(request_payload))
+    except ConnectionAuthError as exc:
+        return {"error": f"Authentication required: {exc}"}
+    except Exception as exc:  # pragma: no cover - defensive path
+        return {"error": str(exc), "query": request_payload}
+
+    return {
+        "found": response.get("found", 0),
+        "start": response.get("start", sanitized_offset),
+        "hits": response.get("hits", []),
+        "facets": response.get("facets", []),
+        "query": request_payload,
+    }
 
 
 @mcp.tool()
@@ -135,7 +162,6 @@ __all__ = [
     "get_entity",
     "get_entity_annotations",
     "get_entity_children",
-    "query_entities",
     "query_table",
-    "search_entities",
+    "search_synapse",
 ]

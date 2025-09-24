@@ -8,10 +8,60 @@ from .tools import (
     get_entity,
     get_entity_annotations,
     get_entity_children,
-    query_entities,
     query_table,
+    search_synapse,
 )
 from .utils import validate_synapse_id
+
+
+def _search_entities(
+    ctx,
+    *,
+    name: str | None = None,
+    entity_type: str | None = None,
+    entity_types: List[str] | None = None,
+    parent_id: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> List[Dict[str, object]]:
+    """Run a Synapse search and hydrate the hits into full entity payloads."""
+    search_result = search_synapse.fn(
+        ctx,
+        name=name,
+        entity_type=entity_type,
+        entity_types=entity_types,
+        parent_id=parent_id,
+        limit=limit,
+        offset=offset,
+    )
+
+    if isinstance(search_result, dict) and search_result.get("error"):
+        return [search_result]
+
+    hits: List[Dict[str, object]] = search_result.get("hits", []) if isinstance(search_result, dict) else []
+    if not hits:
+        return []
+
+    entities: List[Dict[str, object]] = []
+    seen_ids: set[str] = set()
+    for hit in hits:
+        entity_id = hit.get("id") if isinstance(hit, dict) else None
+        if not entity_id or entity_id in seen_ids:
+            continue
+        seen_ids.add(entity_id)
+        entities.append(get_entity.fn(entity_id, ctx))
+
+    if name:
+        normalized = name.lower()
+        exact_matches = [
+            entity
+            for entity in entities
+            if isinstance(entity, dict)
+            and str(entity.get("name", "")).lower() == normalized
+        ]
+        return exact_matches
+
+    return entities
 
 
 @mcp.resource("entities/{id_or_name}")
@@ -25,7 +75,7 @@ def get_entity_by_id_or_name(id_or_name: str) -> Dict[str, object]:
     if validate_synapse_id(id_or_name):
         return get_entity.fn(id_or_name, ctx)
 
-    results = query_entities.fn(ctx, name=id_or_name)
+    results = _search_entities(ctx, name=id_or_name, limit=20)
     entity = first_successful_result(results) if results else None
     if entity:
         return entity
@@ -59,7 +109,7 @@ def query_entities_by_type(entity_type: str) -> List[Dict[str, object]]:
         ctx = require_request_context()
     except ConnectionAuthError as exc:
         return [{"error": str(exc)}]
-    return query_entities.fn(ctx, entity_type=entity_type)
+    return _search_entities(ctx, entity_type=entity_type, limit=50)
 
 
 @mcp.resource("entities/parent/{parent_id}")
@@ -69,7 +119,7 @@ def query_entities_by_parent(parent_id: str) -> List[Dict[str, object]]:
         ctx = require_request_context()
     except ConnectionAuthError as exc:
         return [{"error": str(exc)}]
-    return query_entities.fn(ctx, parent_id=parent_id)
+    return _search_entities(ctx, parent_id=parent_id, limit=50)
 
 
 @mcp.resource("projects/{id_or_name}")
@@ -83,7 +133,7 @@ def get_project_by_id_or_name(id_or_name: str) -> Dict[str, object]:
     if validate_synapse_id(id_or_name):
         entity = get_entity.fn(id_or_name, ctx)
     else:
-        results = query_entities.fn(ctx, name=id_or_name, entity_type="project")
+        results = _search_entities(ctx, name=id_or_name, entity_type="project", limit=20)
         entity = first_successful_result(results) if results else None
 
     if entity and entity.get("type", "").lower() == "project":
@@ -130,7 +180,7 @@ def get_dataset_by_id_or_name(id_or_name: str) -> Dict[str, object]:
     if validate_synapse_id(id_or_name):
         entity = get_entity.fn(id_or_name, ctx)
     else:
-        results = query_entities.fn(ctx, name=id_or_name, entity_type="dataset")
+        results = _search_entities(ctx, name=id_or_name, entity_type="dataset", limit=20)
         entity = first_successful_result(results) if results else None
 
     if entity and entity.get("type", "").lower() == "dataset":
@@ -185,7 +235,7 @@ def get_folder_by_id_or_name(id_or_name: str) -> Dict[str, object]:
     if validate_synapse_id(id_or_name):
         entity = get_entity.fn(id_or_name, ctx)
     else:
-        results = query_entities.fn(ctx, name=id_or_name, entity_type="folder")
+        results = _search_entities(ctx, name=id_or_name, entity_type="folder", limit=20)
         entity = first_successful_result(results) if results else None
 
     if entity and entity.get("type", "").lower() == "folder":
@@ -240,7 +290,7 @@ def get_file_by_id_or_name(id_or_name: str) -> Dict[str, object]:
     if validate_synapse_id(id_or_name):
         entity = get_entity.fn(id_or_name, ctx)
     else:
-        results = query_entities.fn(ctx, name=id_or_name, entity_type="file")
+        results = _search_entities(ctx, name=id_or_name, entity_type="file", limit=20)
         entity = first_successful_result(results) if results else None
 
     if entity and entity.get("type", "").lower() == "file":
@@ -291,7 +341,7 @@ def get_table_by_id_or_name(id_or_name: str) -> Dict[str, object]:
     if validate_synapse_id(id_or_name):
         entity = get_entity.fn(id_or_name, ctx)
     else:
-        results = query_entities.fn(ctx, name=id_or_name, entity_type="table")
+        results = _search_entities(ctx, name=id_or_name, entity_type="table", limit=20)
         entity = first_successful_result(results) if results else None
 
     if entity and entity.get("type", "").lower() == "table":
