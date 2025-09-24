@@ -11,6 +11,25 @@ from .context_helpers import ConnectionAuthError, get_entity_operations
 from .utils import format_annotations, validate_synapse_id
 
 
+DEFAULT_RETURN_FIELDS: List[str] = ["name", "description", "node_type"]
+
+
+def _normalize_fields(fields: Optional[List[str]]) -> List[str]:
+    """Deduplicate and strip return field entries while preserving order."""
+    if not fields:
+        return []
+
+    seen: set[str] = set()
+    normalized: List[str] = []
+    for raw in fields:
+        cleaned = str(raw).strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        normalized.append(cleaned)
+    return normalized
+
+
 @mcp.tool()
 def get_entity(entity_id: str, ctx: Context) -> Dict[str, Any]:
     """Get a Synapse entity by ID."""
@@ -74,7 +93,6 @@ def search_synapse(
     parent_id: Optional[str] = None,
     limit: int = 20,
     offset: int = 0,
-    return_fields: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Execute a Synapse search using the public search endpoint."""
     try:
@@ -91,22 +109,16 @@ def search_synapse(
     if name and name not in query_terms:
         query_terms.append(name)
 
+    default_return_fields = _normalize_fields(DEFAULT_RETURN_FIELDS)
     request_payload: Dict[str, Any] = {
         "queryTerm": query_terms,
         "start": sanitized_offset,
         "size": sanitized_limit,
-        "returnFields": return_fields
-        or [
-            "id",
-            "name",
-            "description",
-            "node_type",
-            "path",
-            "created_on",
-            "modified_on",
-            "created_by",
-        ],
     }
+
+    normalized_fields = default_return_fields
+    if normalized_fields:
+        request_payload["returnFields"] = normalized_fields
 
     requested_types: List[str] = []
     if entity_types:
@@ -127,20 +139,54 @@ def search_synapse(
     if boolean_query:
         request_payload["booleanQuery"] = boolean_query
 
+    warnings: List[str] = []
+    original_payload: Optional[Dict[str, Any]] = None
+    dropped_return_fields: Optional[List[str]] = None
+
     try:
         response = synapse_client.restPOST("/search", body=json.dumps(request_payload))
     except ConnectionAuthError as exc:
         return {"error": f"Authentication required: {exc}"}
     except Exception as exc:  # pragma: no cover - defensive path
-        return {"error": str(exc), "query": request_payload}
+        error_message = str(exc)
+        if "Invalid field name" in error_message and "returnFields" in request_payload:
+            original_payload = dict(request_payload)
+            dropped_return_fields = list(request_payload.get("returnFields", []))
+            fallback_payload = {k: v for k, v in request_payload.items() if k != "returnFields"}
 
-    return {
+            try:
+                response = synapse_client.restPOST("/search", body=json.dumps(fallback_payload))
+            except Exception as fallback_exc:  # pragma: no cover - defensive path
+                return {
+                    "error": str(fallback_exc),
+                    "query": fallback_payload,
+                    "original_query": original_payload,
+                    "dropped_return_fields": dropped_return_fields,
+                }
+
+            warnings.append(
+                f"Synapse rejected requested return fields {dropped_return_fields}; retried without custom return fields."
+            )
+            request_payload = fallback_payload
+        else:
+            return {"error": error_message, "query": request_payload}
+
+    result: Dict[str, Any] = {
         "found": response.get("found", 0),
         "start": response.get("start", sanitized_offset),
         "hits": response.get("hits", []),
         "facets": response.get("facets", []),
         "query": request_payload,
     }
+
+    if warnings:
+        result["warnings"] = warnings
+    if original_payload:
+        result["original_query"] = original_payload
+    if dropped_return_fields:
+        result["dropped_return_fields"] = dropped_return_fields
+
+    return result
 
 
 @mcp.tool()
