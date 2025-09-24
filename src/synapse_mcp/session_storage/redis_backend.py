@@ -1,6 +1,5 @@
 """Redis-backed session storage for production deployments."""
 
-import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -30,9 +29,17 @@ class RedisSessionStorage(SessionStorage):
         self.key_prefix = key_prefix
         self._redis: Optional["redis.Redis"] = None
 
-        self.user_token_key = f"{key_prefix}:user_token"
-        self.token_user_key = f"{key_prefix}:token_user"
-        self.token_metadata_key = f"{key_prefix}:metadata"
+        self.user_subjects_set = f"{key_prefix}:subjects"
+        self.known_tokens_set = f"{key_prefix}:tokens"
+
+    def _subject_token_key(self, user_subject: str) -> str:
+        return f"{self.key_prefix}:user:{user_subject}"
+
+    def _token_subject_key(self, access_token: str) -> str:
+        return f"{self.key_prefix}:token:{access_token}"
+
+    def _token_metadata_key(self, access_token: str) -> str:
+        return f"{self.key_prefix}:metadata:{access_token}"
 
     async def _get_redis(self) -> "redis.Redis":
         if self._redis is None:
@@ -62,16 +69,17 @@ class RedisSessionStorage(SessionStorage):
                 "user_subject": user_subject,
             }
 
+            existing_token = await redis_client.get(self._subject_token_key(user_subject))
+            if existing_token and existing_token != access_token:
+                await self._delete_token_index(redis_client, existing_token)
+
             async with redis_client.pipeline() as pipe:
-                await pipe.hset(self.user_token_key, user_subject, access_token)
-                await pipe.expire(self.user_token_key, ttl_seconds + 300)
+                pipe.setex(self._subject_token_key(user_subject), ttl_seconds, access_token)
+                pipe.setex(self._token_subject_key(access_token), ttl_seconds, user_subject)
+                pipe.setex(self._token_metadata_key(access_token), ttl_seconds, json.dumps(metadata))
 
-                await pipe.hset(self.token_user_key, access_token, user_subject)
-                await pipe.expire(self.token_user_key, ttl_seconds + 300)
-
-                await pipe.hset(self.token_metadata_key, access_token, json.dumps(metadata))
-                await pipe.expire(self.token_metadata_key, ttl_seconds + 300)
-
+                pipe.sadd(self.user_subjects_set, user_subject)
+                pipe.sadd(self.known_tokens_set, access_token)
                 await pipe.execute()
 
             logger.debug("Stored user %s -> token %s*** in Redis", user_subject, access_token[:20])
@@ -83,9 +91,10 @@ class RedisSessionStorage(SessionStorage):
     async def get_user_token(self, user_subject: str) -> Optional[str]:
         try:
             redis_client = await self._get_redis()
-            access_token = await redis_client.hget(self.user_token_key, user_subject)
+            access_token = await redis_client.get(self._subject_token_key(user_subject))
             if access_token:
                 logger.debug("Retrieved token for user %s from Redis", user_subject)
+                await redis_client.sadd(self.user_subjects_set, user_subject)
             return access_token
         except Exception as exc:  # pragma: no cover
             logger.error("Failed to get user token from Redis: %s", exc)
@@ -94,13 +103,14 @@ class RedisSessionStorage(SessionStorage):
     async def remove_user_token(self, user_subject: str) -> None:
         try:
             redis_client = await self._get_redis()
-            access_token = await redis_client.hget(self.user_token_key, user_subject)
+            subject_key = self._subject_token_key(user_subject)
+            access_token = await redis_client.get(subject_key)
+
+            await redis_client.delete(subject_key)
+            await redis_client.srem(self.user_subjects_set, user_subject)
+
             if access_token:
-                async with redis_client.pipeline() as pipe:
-                    await pipe.hdel(self.user_token_key, user_subject)
-                    await pipe.hdel(self.token_user_key, access_token)
-                    await pipe.hdel(self.token_metadata_key, access_token)
-                    await pipe.execute()
+                await self._delete_token_index(redis_client, access_token)
                 logger.debug("Removed user %s and token %s*** from Redis", user_subject, access_token[:20])
         except Exception as exc:  # pragma: no cover
             logger.error("Failed to remove user token from Redis: %s", exc)
@@ -108,26 +118,23 @@ class RedisSessionStorage(SessionStorage):
     async def cleanup_expired_tokens(self) -> None:
         try:
             redis_client = await self._get_redis()
-            all_metadata = await redis_client.hgetall(self.token_metadata_key)
+            removed_subjects = await self._scan_and_clean_set(
+                redis_client,
+                self.user_subjects_set,
+                self._subject_token_key,
+            )
+            removed_tokens = await self._scan_and_clean_set(
+                redis_client,
+                self.known_tokens_set,
+                self._token_subject_key,
+            )
 
-            current_time = datetime.now(timezone.utc)
-            expired_tokens: list[str] = []
-
-            for access_token, metadata_json in all_metadata.items():
-                try:
-                    metadata = json.loads(metadata_json)
-                    expires_at = datetime.fromisoformat(metadata["expires_at"])
-                    if expires_at < current_time:
-                        expired_tokens.append(access_token)
-                        user_subject = metadata.get("user_subject")
-                        if user_subject:
-                            await self.remove_user_token(user_subject)
-                except Exception as exc:  # pragma: no cover
-                    logger.warning("Error processing token metadata: %s", exc)
-                    expired_tokens.append(access_token)
-
-            if expired_tokens:
-                logger.info("Cleaned up %s expired tokens from Redis", len(expired_tokens))
+            if removed_subjects or removed_tokens:
+                logger.info(
+                    "Cleaned up %s subjects and %s tokens from Redis session storage",
+                    removed_subjects,
+                    removed_tokens,
+                )
 
         except Exception as exc:  # pragma: no cover
             logger.error("Failed to cleanup expired tokens in Redis: %s", exc)
@@ -135,8 +142,14 @@ class RedisSessionStorage(SessionStorage):
     async def get_all_user_subjects(self) -> Set[str]:
         try:
             redis_client = await self._get_redis()
-            user_subjects = await redis_client.hkeys(self.user_token_key)
-            return set(user_subjects)
+            live_subjects: Set[str] = set()
+            async for batch_members, existence in self._iter_live_members(
+                redis_client,
+                self.user_subjects_set,
+                self._subject_token_key,
+            ):
+                live_subjects.update(member for member, exists in zip(batch_members, existence) if exists)
+            return live_subjects
         except Exception as exc:  # pragma: no cover
             logger.error("Failed to get all user subjects from Redis: %s", exc)
             return set()
@@ -144,7 +157,7 @@ class RedisSessionStorage(SessionStorage):
     async def find_user_by_token(self, access_token: str) -> Optional[str]:
         try:
             redis_client = await self._get_redis()
-            return await redis_client.hget(self.token_user_key, access_token)
+            return await redis_client.get(self._token_subject_key(access_token))
         except Exception as exc:  # pragma: no cover
             logger.error("Failed to find user by token in Redis: %s", exc)
             return None
@@ -153,6 +166,68 @@ class RedisSessionStorage(SessionStorage):
         if self._redis:
             await self._redis.close()
             logger.debug("Redis connection closed")
+
+    async def _delete_token_index(self, redis_client: "redis.Redis", access_token: str) -> None:
+        async with redis_client.pipeline() as pipe:
+            pipe.delete(self._token_subject_key(access_token))
+            pipe.delete(self._token_metadata_key(access_token))
+            pipe.srem(self.known_tokens_set, access_token)
+            await pipe.execute()
+
+    async def _scan_and_clean_set(
+        self,
+        redis_client: "redis.Redis",
+        set_key: str,
+        key_formatter,
+        *,
+        batch_size: int = 100,
+    ) -> int:
+        removed_total = 0
+        cursor = 0
+        while True:
+            cursor, members = await redis_client.sscan(set_key, cursor=cursor, count=batch_size)
+            if members:
+                keys_to_check = [key_formatter(member) for member in members]
+                async with redis_client.pipeline() as pipe:
+                    for key in keys_to_check:
+                        pipe.exists(key)
+                    existence_results = await pipe.execute()
+
+                expired_members = [member for member, exists in zip(members, existence_results) if not exists]
+                if expired_members:
+                    await redis_client.srem(set_key, *expired_members)
+                    removed_total += len(expired_members)
+
+            if cursor == 0:
+                break
+        return removed_total
+
+    async def _iter_live_members(
+        self,
+        redis_client: "redis.Redis",
+        set_key: str,
+        key_formatter,
+        *,
+        batch_size: int = 100,
+    ):
+        cursor = 0
+        while True:
+            cursor, members = await redis_client.sscan(set_key, cursor=cursor, count=batch_size)
+            if members:
+                keys_to_check = [key_formatter(member) for member in members]
+                async with redis_client.pipeline() as pipe:
+                    for key in keys_to_check:
+                        pipe.exists(key)
+                    existence_results = await pipe.execute()
+
+                expired_members = [member for member, exists in zip(members, existence_results) if not exists]
+                if expired_members:
+                    await redis_client.srem(set_key, *expired_members)
+
+                yield members, existence_results
+
+            if cursor == 0:
+                break
 
 
 __all__ = ["RedisSessionStorage", "REDIS_AVAILABLE"]
