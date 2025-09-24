@@ -133,6 +133,7 @@ The project is configured for easy deployment to [Fly.io](https://fly.io), a pla
     flyctl secrets set SYNAPSE_OAUTH_CLIENT_ID="your_client_id"
     flyctl secrets set SYNAPSE_OAUTH_CLIENT_SECRET="your_client_secret"
     flyctl secrets set SYNAPSE_OAUTH_REDIRECT_URI="https://your-app-name.fly.dev/oauth/callback"
+    flyctl secrets set REDIS_URL="redis://:password@your-redis-host:6379/0"
     ```
     *Note: The `fly.toml` already sets `MCP_TRANSPORT=streamable-http` and `MCP_SERVER_URL` as environment variables, so you don't need to set them as secrets.*
 
