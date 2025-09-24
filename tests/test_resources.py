@@ -35,24 +35,3 @@ def test_get_entity_resource_uses_context(monkeypatch):
         request_ctx.reset(token)
 
     assert result == {'id': 'syn123', 'type': 'Project'}
-
-
-def test_get_datasets_as_croissant_uses_query_table_context(monkeypatch):
-    ctx = DummyContext()
-    captured = {}
-
-    def fake_query_table(table_id, query, ctx_arg):
-        captured['args'] = (table_id, query, ctx_arg)
-        return {'data': []}
-
-    monkeypatch.setattr(synapse_mcp.query_table, 'fn', fake_query_table)
-    import synapse_mcp.tools as tools
-    monkeypatch.setattr(tools, 'convert_to_croissant', lambda payload: payload)
-
-    result = synapse_mcp.get_datasets_as_croissant.fn(ctx)
-
-    assert result == {'data': []}
-    table_id, query, ctx_arg = captured['args']
-    assert table_id == 'syn61609402'
-    assert 'SELECT * FROM syn61609402' in query
-    assert ctx_arg is ctx

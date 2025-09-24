@@ -6,7 +6,6 @@ from fastmcp import Context
 
 from .app import mcp
 from .context_helpers import ConnectionAuthError, get_entity_operations, get_query_builder
-from .entities.croissant import convert_to_croissant
 from .utils import format_annotations, validate_synapse_id
 
 
@@ -132,18 +131,7 @@ def query_table(table_id: str, query: str, ctx: Context) -> Dict[str, Any]:
         return {"error": str(exc), "table_id": table_id, "query": query}
 
 
-@mcp.tool()
-def get_datasets_as_croissant(ctx: Context) -> Dict[str, Any]:
-    """Get public datasets in Croissant metadata format."""
-    table_id = "syn61609402"
-    query_result = query_table.fn(table_id, f"SELECT * FROM {table_id}", ctx)
-    if "error" in query_result:
-        return query_result
-    return convert_to_croissant(query_result)
-
-
 __all__ = [
-    "get_datasets_as_croissant",
     "get_entity",
     "get_entity_annotations",
     "get_entity_children",

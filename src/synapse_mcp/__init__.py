@@ -2,7 +2,6 @@
 
 from .app import auth, health_check, initialize_server, mcp
 from .connection_auth import get_synapse_client
-from .entities.croissant import convert_to_croissant
 from .context_helpers import (
     ConnectionAuthError,
     first_successful_result,
@@ -40,7 +39,6 @@ from .resources import (
     query_table_resource,
 )
 from .tools import (
-    get_datasets_as_croissant,
     get_entity,
     get_entity_annotations,
     get_entity_children,
@@ -79,13 +77,11 @@ __all__ = [
     "auth",
     "authenticate_synapse_client",
     "ConnectionAuthError",
-    "convert_to_croissant",
     "first_successful_result",
     "get_dataset_annotations",
     "get_dataset_by_id_or_name",
     "get_dataset_children",
     "get_dataset_parent",
-    "get_datasets_as_croissant",
     "get_entity",
     "get_entity_annotations",
     "get_entity_annotations_resource",

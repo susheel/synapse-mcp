@@ -1,7 +1,4 @@
 import unittest
-from synapse_mcp.entities.croissant import convert_to_croissant
-
-
 import importlib.util
 import os
 import sys
@@ -24,10 +21,6 @@ class TestPackageInstallation(unittest.TestCase):
         
         from synapse_mcp import utils
         self.assertIsNotNone(utils)
-        
-        from synapse_mcp.entities import croissant
-        self.assertIsNotNone(croissant)
-        
         # Test entities subpackage
         from synapse_mcp.entities import base
         self.assertIsNotNone(base)

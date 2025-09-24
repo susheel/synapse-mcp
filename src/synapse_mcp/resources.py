@@ -350,7 +350,6 @@ __all__ = [
     "get_dataset_annotations",
     "get_dataset_children",
     "get_dataset_parent",
-    "get_datasets_as_croissant",
     "get_entity_annotations_resource",
     "get_entity_by_id_or_name",
     "get_entity_children_resource",
