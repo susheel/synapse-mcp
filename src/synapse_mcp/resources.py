@@ -8,7 +8,6 @@ from .tools import (
     get_entity,
     get_entity_annotations,
     get_entity_children,
-    query_table,
     search_synapse,
 )
 from .utils import validate_synapse_id
@@ -381,20 +380,6 @@ def get_table_parent(id: str) -> Dict[str, object]:
     return get_entity.fn(parent_id, ctx)
 
 
-@mcp.resource("table/{id}/{query}")
-def query_table_resource(id: str, query: str) -> Dict[str, object]:
-    """Query a table with SQL-like syntax."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-
-    import urllib.parse
-
-    decoded_query = urllib.parse.unquote(query)
-    return query_table.fn(id, decoded_query, ctx)
-
-
 __all__ = [
     "get_dataset_by_id_or_name",
     "get_dataset_annotations",
@@ -421,5 +406,4 @@ __all__ = [
     "get_table_parent",
     "query_entities_by_parent",
     "query_entities_by_type",
-    "query_table_resource",
 ]
