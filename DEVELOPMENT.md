@@ -60,6 +60,17 @@ To run the test suite, use `pytest`:
 python -m pytest
 ```
 
+### Redis session storage smoke test
+
+If you have a live Redis instance available, run the smoke test to validate connectivity and TTL behaviour:
+
+```bash
+export REDIS_URL="redis://localhost:6379/0"
+python scripts/smoke_redis_session_storage.py
+```
+
+The script exercises token creation, replacement, expiration, and cleanup. It exits non-zero if anything fails.
+
 ## Deployment 
 
 ### Docker build and run
@@ -141,4 +152,3 @@ The project is configured for easy deployment to [Fly.io](https://fly.io), a pla
     ```
 
 Your Synapse MCP server is now live on Fly.io. You can access it at `https://your-app-name.fly.dev`.
-
