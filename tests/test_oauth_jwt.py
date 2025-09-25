@@ -25,7 +25,7 @@ def test_verify_token_success(monkeypatch):
         "sub": "user",
         "aud": "client",
         "exp": 123,
-        "access": {"scope": ["view", "download", "modify"]},
+        "access": {"scope": ["openid", "view"]},
     }
     _setup_jwt_mocks(monkeypatch, decoded)
 
@@ -33,12 +33,12 @@ def test_verify_token_success(monkeypatch):
         jwks_uri="http://example/jwks",
         issuer="issuer",
         audience="client",
-        required_scopes=["view", "download"],
+        required_scopes=["openid", "view"],
     )
 
     result: SimpleNamespace = verifier._verify_token_sync("token")  # type: ignore[attr-defined]
     assert result.sub == "user"
-    assert result.scopes == ["view", "download", "modify"]
+    assert result.scopes == ["openid", "view"]
 
 
 def test_verify_token_missing_scope_returns_none(monkeypatch):
@@ -54,7 +54,7 @@ def test_verify_token_missing_scope_returns_none(monkeypatch):
         jwks_uri="http://example/jwks",
         issuer="issuer",
         audience="client",
-        required_scopes=["view", "download"],
+        required_scopes=["openid", "view"],
     )
 
     result = verifier._verify_token_sync("token")  # type: ignore[attr-defined]

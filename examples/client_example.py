@@ -121,14 +121,5 @@ def main():
     print(f"Found {search_response.get('found', 0)} matching files (showing {len(hits)})")
     for hit in hits:
         print(f"- {hit.get('name', 'Unknown')} ({hit.get('id', 'Unknown')})")
-    
-    # Example 5: Query a table (if available)
-    # Replace with a real Synapse table ID
-    table_id = input("Enter a Synapse table ID: ")
-    print(f"\nQuerying table {table_id}...")
-    query = f"SELECT * FROM {table_id} LIMIT 10"
-    table_data = client.use_tool("query_table", {"table_id": table_id, "query": query})
-    print(json.dumps(table_data, indent=2))
-
 if __name__ == "__main__":
     main()

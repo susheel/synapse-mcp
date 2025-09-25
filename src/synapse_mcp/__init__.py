@@ -35,13 +35,11 @@ from .resources import (
     get_table_parent,
     query_entities_by_parent,
     query_entities_by_type,
-    query_table_resource,
 )
 from .tools import (
     get_entity,
     get_entity_annotations,
     get_entity_children,
-    query_table,
     search_synapse,
 )
 
@@ -113,8 +111,6 @@ __all__ = [
     "mcp",
     "query_entities_by_parent",
     "query_entities_by_type",
-    "query_table",
-    "query_table_resource",
     "require_request_context",
     "search_synapse",
 ]

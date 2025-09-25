@@ -189,25 +189,9 @@ def search_synapse(
     return result
 
 
-@mcp.tool()
-def query_table(table_id: str, query: str, ctx: Context) -> Dict[str, Any]:
-    """Query a Synapse table."""
-    if not validate_synapse_id(table_id):
-        return {"error": f"Invalid Synapse ID: {table_id}"}
-
-    try:
-        entity_ops = get_entity_operations(ctx)
-        return entity_ops["table"].query_table(table_id, query)
-    except ConnectionAuthError as exc:
-        return {"error": f"Authentication required: {exc}", "table_id": table_id}
-    except Exception as exc:  # pragma: no cover - defensive path
-        return {"error": str(exc), "table_id": table_id, "query": query}
-
-
 __all__ = [
     "get_entity",
     "get_entity_annotations",
     "get_entity_children",
-    "query_table",
     "search_synapse",
 ]
