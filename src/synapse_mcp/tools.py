@@ -30,9 +30,18 @@ def _normalize_fields(fields: Optional[List[str]]) -> List[str]:
     return normalized
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Fetch Entity",
+    description="Return Synapse entity metadata by ID (projects, folders, files, tables, etc.).",
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "destructiveHint": False,
+        "openWorldHint": True,
+    },
+)
 def get_entity(entity_id: str, ctx: Context) -> Dict[str, Any]:
-    """Get a Synapse entity by ID."""
+    """Return Synapse entity metadata by ID (projects, folders, files, tables, etc.)."""
     if not validate_synapse_id(entity_id):
         return {"error": f"Invalid Synapse ID: {entity_id}"}
 
@@ -45,9 +54,18 @@ def get_entity(entity_id: str, ctx: Context) -> Dict[str, Any]:
         return {"error": str(exc), "entity_id": entity_id}
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Fetch Entity Annotations",
+    description="Return custom annotation key/value pairs for a Synapse entity.",
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "destructiveHint": False,
+        "openWorldHint": True,
+    },
+)
 def get_entity_annotations(entity_id: str, ctx: Context) -> Dict[str, Any]:
-    """Get annotations for an entity."""
+    """Return custom annotation key/value pairs for a Synapse entity."""
     if not validate_synapse_id(entity_id):
         return {"error": f"Invalid Synapse ID: {entity_id}"}
 
@@ -61,9 +79,18 @@ def get_entity_annotations(entity_id: str, ctx: Context) -> Dict[str, Any]:
         return {"error": str(exc), "entity_id": entity_id}
 
 
-@mcp.tool()
+@mcp.tool(
+    title="List Entity Children",
+    description="List children for Synapse container entities (projects or folders).",
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "destructiveHint": False,
+        "openWorldHint": True,
+    },
+)
 def get_entity_children(entity_id: str, ctx: Context) -> List[Dict[str, Any]]:
-    """Get child entities of a container entity."""
+    """List children for Synapse container entities (projects or folders)."""
     if not validate_synapse_id(entity_id):
         return [{"error": f"Invalid Synapse ID: {entity_id}"}]
 
@@ -82,8 +109,20 @@ def get_entity_children(entity_id: str, ctx: Context) -> List[Dict[str, Any]]:
     except Exception as exc:  # pragma: no cover - defensive path
         return [{"error": str(exc), "entity_id": entity_id}]
 
-
-@mcp.tool()
+@mcp.tool(
+    title="Search Synapse",
+    description=(
+        "Search Synapse entities using keyword queries with optional name/type/parent filters. "
+        "Results are served by Synapse as data custodian. Attribution and licensing are "
+        "determined by the original contributors; check the specific entity's annotations or Wiki for details."
+    ),
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "destructiveHint": False,
+        "openWorldHint": True,
+    },
+)
 def search_synapse(
     ctx: Context,
     query_term: Optional[str] = None,
@@ -94,7 +133,11 @@ def search_synapse(
     limit: int = 20,
     offset: int = 0,
 ) -> Dict[str, Any]:
-    """Execute a Synapse search using the public search endpoint."""
+    """Search Synapse entities using keyword queries with optional name/type/parent filters.
+
+    Results are served by Synapse as data custodian. Attribution and licensing are
+    determined by the original contributors; review the returned entity metadata for
+    details."""
     try:
         synapse_client = get_synapse_client(ctx)
     except ConnectionAuthError as exc:
