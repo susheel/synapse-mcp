@@ -7,7 +7,6 @@ from .context_helpers import ConnectionAuthError, first_successful_result, requi
 from .tools import (
     get_entity,
     get_entity_annotations,
-    get_entity_children,
     search_synapse,
 )
 from .utils import validate_synapse_id
@@ -91,36 +90,6 @@ def get_entity_annotations_resource(id: str) -> Dict[str, object]:
     return get_entity_annotations.fn(id, ctx)
 
 
-@mcp.resource("entities/{id}/children")
-def get_entity_children_resource(id: str) -> List[Dict[str, object]]:
-    """Get entity children."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return [{"error": str(exc)}]
-    return get_entity_children.fn(id, ctx)
-
-
-@mcp.resource("entities/{entity_type}")
-def query_entities_by_type(entity_type: str) -> List[Dict[str, object]]:
-    """Query entities by type."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return [{"error": str(exc)}]
-    return _search_entities(ctx, entity_type=entity_type, limit=50)
-
-
-@mcp.resource("entities/parent/{parent_id}")
-def query_entities_by_parent(parent_id: str) -> List[Dict[str, object]]:
-    """Query entities by parent ID."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return [{"error": str(exc)}]
-    return _search_entities(ctx, parent_id=parent_id, limit=50)
-
-
 @mcp.resource("projects/{id_or_name}")
 def get_project_by_id_or_name(id_or_name: str) -> Dict[str, object]:
     """Get project by ID or name."""
@@ -150,22 +119,6 @@ def get_project_annotations(id: str) -> Dict[str, object]:
     except ConnectionAuthError as exc:
         return {"error": str(exc)}
     return get_entity_annotations.fn(id, ctx)
-
-
-@mcp.resource("projects/{id}/children")
-def get_project_children(id: str) -> List[Dict[str, object]]:
-    """Get project children."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return [{"error": str(exc)}]
-    return get_entity_children.fn(id, ctx)
-
-
-@mcp.resource("projects/{id}/parent")
-def get_project_parent(id: str) -> Dict[str, object]:
-    """Get project parent."""
-    return {"error": "Projects do not have parents in Synapse"}
 
 
 @mcp.resource("datasets/{id_or_name}")
@@ -199,30 +152,6 @@ def get_dataset_annotations(id: str) -> Dict[str, object]:
     return get_entity_annotations.fn(id, ctx)
 
 
-@mcp.resource("datasets/{id}/children")
-def get_dataset_children(id: str) -> List[Dict[str, object]]:
-    """Get dataset children."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return [{"error": str(exc)}]
-    return get_entity_children.fn(id, ctx)
-
-
-@mcp.resource("datasets/{id}/parent")
-def get_dataset_parent(id: str) -> Dict[str, object]:
-    """Get dataset parent."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-    entity = get_entity.fn(id, ctx)
-    parent_id = entity.get("parentId") if isinstance(entity, dict) else None
-    if not parent_id:
-        return {"error": "Dataset has no parent"}
-    return get_entity.fn(parent_id, ctx)
-
-
 @mcp.resource("folders/{id_or_name}")
 def get_folder_by_id_or_name(id_or_name: str) -> Dict[str, object]:
     """Get folder by ID or name."""
@@ -252,30 +181,6 @@ def get_folder_annotations(id: str) -> Dict[str, object]:
     except ConnectionAuthError as exc:
         return {"error": str(exc)}
     return get_entity_annotations.fn(id, ctx)
-
-
-@mcp.resource("folders/{id}/children")
-def get_folder_children(id: str) -> List[Dict[str, object]]:
-    """Get folder children."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return [{"error": str(exc)}]
-    return get_entity_children.fn(id, ctx)
-
-
-@mcp.resource("folders/{id}/parent")
-def get_folder_parent(id: str) -> Dict[str, object]:
-    """Get folder parent."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-    entity = get_entity.fn(id, ctx)
-    parent_id = entity.get("parentId") if isinstance(entity, dict) else None
-    if not parent_id:
-        return {"error": "Folder has no parent"}
-    return get_entity.fn(parent_id, ctx)
 
 
 @mcp.resource("files/{id_or_name}")
@@ -309,26 +214,6 @@ def get_file_annotations(id: str) -> Dict[str, object]:
     return get_entity_annotations.fn(id, ctx)
 
 
-@mcp.resource("files/{id}/children")
-def get_file_children(id: str) -> List[Dict[str, object]]:
-    """Get file children."""
-    return [{"error": "Files do not have children in Synapse"}]
-
-
-@mcp.resource("files/{id}/parent")
-def get_file_parent(id: str) -> Dict[str, object]:
-    """Get file parent."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-    entity = get_entity.fn(id, ctx)
-    parent_id = entity.get("parentId") if isinstance(entity, dict) else None
-    if not parent_id:
-        return {"error": "File has no parent"}
-    return get_entity.fn(parent_id, ctx)
-
-
 @mcp.resource("tables/{id_or_name}")
 def get_table_by_id_or_name(id_or_name: str) -> Dict[str, object]:
     """Get table by ID or name."""
@@ -360,50 +245,17 @@ def get_table_annotations(id: str) -> Dict[str, object]:
     return get_entity_annotations.fn(id, ctx)
 
 
-@mcp.resource("tables/{id}/children")
-def get_table_children(id: str) -> List[Dict[str, object]]:
-    """Get table children."""
-    return [{"error": "Tables do not have children in Synapse"}]
-
-
-@mcp.resource("tables/{id}/parent")
-def get_table_parent(id: str) -> Dict[str, object]:
-    """Get table parent."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-    entity = get_entity.fn(id, ctx)
-    parent_id = entity.get("parentId") if isinstance(entity, dict) else None
-    if not parent_id:
-        return {"error": "Table has no parent"}
-    return get_entity.fn(parent_id, ctx)
-
-
 __all__ = [
-    "get_dataset_by_id_or_name",
     "get_dataset_annotations",
-    "get_dataset_children",
-    "get_dataset_parent",
+    "get_dataset_by_id_or_name",
     "get_entity_annotations_resource",
     "get_entity_by_id_or_name",
-    "get_entity_children_resource",
     "get_file_annotations",
     "get_file_by_id_or_name",
-    "get_file_children",
-    "get_file_parent",
     "get_folder_annotations",
     "get_folder_by_id_or_name",
-    "get_folder_children",
-    "get_folder_parent",
     "get_project_annotations",
     "get_project_by_id_or_name",
-    "get_project_children",
-    "get_project_parent",
     "get_table_annotations",
     "get_table_by_id_or_name",
-    "get_table_children",
-    "get_table_parent",
-    "query_entities_by_parent",
-    "query_entities_by_type",
 ]

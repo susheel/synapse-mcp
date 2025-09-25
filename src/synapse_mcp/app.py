@@ -12,7 +12,17 @@ from .auth_middleware import OAuthTokenMiddleware
 
 # Instantiate the FastMCP server with optional OAuth proxy
 auth = create_oauth_proxy()
-mcp = FastMCP("Synapse MCP Server", auth=auth)
+mcp = FastMCP(
+    "Synapse MCP Server",
+    instructions=(
+        "Synapse is a collaborative data platform for researchers where data is organized in public or private projects. "
+        "Synapse MCP Server helps users discover and understand Synapse data that they can see, providing tools for: "
+        "searches, wiki retrieval, metadata retrieval, and project traversal (through projects/folders). "
+        "Review entity metadata for attribution and licensing. "
+        "Each connection must authenticate with a Synapse."
+    ),
+    auth=auth,
+)
 
 # Ensure per-connection tokens are routed into the request context
 mcp.add_middleware(OAuthTokenMiddleware())
