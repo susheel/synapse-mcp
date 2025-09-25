@@ -66,7 +66,7 @@ class FakeStorage:
 def build_proxy(monkeypatch, storage, registry: FakeRegistry | None = None):
     monkeypatch.setattr("synapse_mcp.oauth.proxy.create_session_storage", lambda: storage)
     if registry is not None:
-        monkeypatch.setattr("synapse_mcp.oauth.proxy.create_client_registry", lambda: registry)
+        monkeypatch.setattr("synapse_mcp.oauth.proxy.create_client_registry", lambda *_, **__: registry)
     return SessionAwareOAuthProxy(
         upstream_authorization_endpoint="https://auth",
         upstream_token_endpoint="https://token",

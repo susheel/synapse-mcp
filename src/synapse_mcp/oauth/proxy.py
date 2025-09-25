@@ -1,6 +1,7 @@
 """FastMCP OAuth proxy extensions for Synapse."""
 
 import logging
+import os
 from typing import Any, List, Optional
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -26,7 +27,7 @@ class SessionAwareOAuthProxy(OAuthProxy):
         self._session_storage = create_session_storage()
         self._session_tokens: dict[str, tuple[str, Optional[str]]] = {}
         self._code_sessions: dict[str, str] = {}
-        self._client_registry = create_client_registry()
+        self._client_registry = create_client_registry(os.environ)
         self._restore_registered_clients()
         logger.debug(
             "SessionAwareOAuthProxy initialized with session storage %s and client registry %s",
