@@ -28,6 +28,9 @@ class SessionAwareOAuthProxy(OAuthProxy):
         self._session_tokens: dict[str, tuple[str, Optional[str]]] = {}
         self._code_sessions: dict[str, str] = {}
         self._client_registry = create_client_registry(os.environ)
+        if not hasattr(self, "_clients"):
+            # Guard against older fastmcp versions where OAuthProxy skipped initialization.
+            self._clients = {}
         self._restore_registered_clients()
         logger.debug(
             "SessionAwareOAuthProxy initialized with session storage %s and client registry %s",
