@@ -1,7 +1,9 @@
 """FastMCP OAuth proxy extensions for Synapse."""
 
 import logging
+import os
 from typing import Any, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from fastmcp.server.auth import OAuthProxy
 from fastmcp.server.auth.oauth_proxy import ProxyDCRClient
@@ -25,7 +27,7 @@ class SessionAwareOAuthProxy(OAuthProxy):
         self._session_storage = create_session_storage()
         self._session_tokens: dict[str, tuple[str, Optional[str]]] = {}
         self._code_sessions: dict[str, str] = {}
-        self._client_registry = create_client_registry()
+        self._client_registry = create_client_registry(os.environ)
         self._restore_registered_clients()
         logger.debug(
             "SessionAwareOAuthProxy initialized with session storage %s and client registry %s",
@@ -92,6 +94,33 @@ class SessionAwareOAuthProxy(OAuthProxy):
         existing_tokens = set(getattr(self, "_access_tokens", {}).keys())
         existing_codes = set(getattr(self, "_client_codes", {}).keys())
         result = await super()._handle_idp_callback(request, *args, **kwargs)
+
+        if result and hasattr(result, "headers"):
+            location = result.headers.get("location")
+            if location:
+                parsed = urlparse(location)
+                query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+                filtered_pairs = [
+                    (key, value)
+                    for key, value in query_pairs
+                    if not (
+                        key == "state"
+                        and (
+                            value is None
+                            or value == ""
+                            or (isinstance(value, str) and value.lower() == "none")
+                        )
+                    )
+                ]
+
+                if len(filtered_pairs) != len(query_pairs):
+                    new_query = urlencode(filtered_pairs, doseq=True)
+                    new_location = urlunparse(parsed._replace(query=new_query))
+                    result.headers["location"] = new_location
+                    logger.debug(
+                        "Removed empty state parameter from callback redirect (session=%s)",
+                        session_id,
+                    )
         if result:
             if session_id:
                 client_codes = getattr(self, "_client_codes", {})

@@ -6,6 +6,7 @@ import sys
 
 import pytest
 from fastmcp.server.auth.oauth_proxy import OAuthClientInformationFull, OAuthProxy
+from starlette.responses import RedirectResponse
 
 from synapse_mcp.oauth.proxy import SessionAwareOAuthProxy
 
@@ -65,7 +66,7 @@ class FakeStorage:
 def build_proxy(monkeypatch, storage, registry: FakeRegistry | None = None):
     monkeypatch.setattr("synapse_mcp.oauth.proxy.create_session_storage", lambda: storage)
     if registry is not None:
-        monkeypatch.setattr("synapse_mcp.oauth.proxy.create_client_registry", lambda: registry)
+        monkeypatch.setattr("synapse_mcp.oauth.proxy.create_client_registry", lambda *_, **__: registry)
     return SessionAwareOAuthProxy(
         upstream_authorization_endpoint="https://auth",
         upstream_token_endpoint="https://token",
@@ -202,6 +203,43 @@ async def test_exchange_fallback_uses_existing_token(monkeypatch):
     assert proxy._code_sessions == {}
     assert proxy._session_tokens["session-abc"] == ("tokenABC", "user-99")
 
+
+@pytest.mark.anyio
+async def test_handle_callback_sanitizes_none_state(monkeypatch):
+    storage = FakeStorage()
+    proxy = build_proxy(monkeypatch, storage, FakeRegistry())
+
+    async def fake_handle(self, request, *args, **kwargs):
+        return RedirectResponse("http://app/callback?code=new-token&state=None")
+
+    monkeypatch.setattr(OAuthProxy, "_handle_idp_callback", fake_handle)
+
+    request = SimpleNamespace(headers={"mcp-session-id": "session-1"})
+
+    response = await proxy._handle_idp_callback(request)
+
+    assert isinstance(response, RedirectResponse)
+    location = response.headers["location"]
+    assert "code=new-token" in location
+    assert "state=None" not in location
+    assert "state=" not in location
+
+
+@pytest.mark.anyio
+async def test_handle_callback_preserves_valid_state(monkeypatch):
+    storage = FakeStorage()
+    proxy = build_proxy(monkeypatch, storage, FakeRegistry())
+
+    async def fake_handle(self, request, *args, **kwargs):
+        return RedirectResponse("http://app/callback?code=token&state=valid123")
+
+    monkeypatch.setattr(OAuthProxy, "_handle_idp_callback", fake_handle)
+
+    request = SimpleNamespace(headers={"mcp-session-id": "session-2"})
+
+    response = await proxy._handle_idp_callback(request)
+
+    assert response.headers["location"].endswith("state=valid123")
 
 @pytest.mark.anyio
 async def test_client_registry_persists_across_instances(monkeypatch, tmp_path):
