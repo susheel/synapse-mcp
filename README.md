@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/susheel-synapse-mcp-badge.png)](https://mseep.ai/app/susheel-synapse-mcp)
+
 # Synapse MCP Server
 
 A Model Context Protocol (MCP) server that enables AI agent access to Synapse entities (Datasets, Projects, Folders, Files, Tables, and more).
