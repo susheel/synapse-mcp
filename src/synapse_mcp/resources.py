@@ -1,261 +1,76 @@
-"""Resource registrations for Synapse MCP."""
+"""Static resource registrations for Synapse MCP."""
 
-from typing import Dict, List
+from textwrap import dedent
 
 from .app import mcp
-from .context_helpers import ConnectionAuthError, first_successful_result, require_request_context
-from .tools import (
-    get_entity,
-    get_entity_annotations,
-    search_synapse,
+
+
+@mcp.resource(
+    "synapse://guides/user-account-types",
+    name="Synapse Account Types",
+    title="Synapse User Account Types",
+    description="Highlights the Synapse user account types and their capabilities.",
+    mime_type="text/markdown",
 )
-from .utils import validate_synapse_id
+def synapse_user_account_types() -> str:
+    """Return guidance mirroring the Synapse help center on account types."""
 
+    return dedent(
+        """
+        # Synapse User Account Types
 
-def _search_entities(
-    ctx,
-    *,
-    name: str | None = None,
-    entity_type: str | None = None,
-    entity_types: List[str] | None = None,
-    parent_id: str | None = None,
-    limit: int = 20,
-    offset: int = 0,
-) -> List[Dict[str, object]]:
-    """Run a Synapse search and hydrate the hits into full entity payloads."""
-    search_result = search_synapse.fn(
-        ctx,
-        name=name,
-        entity_type=entity_type,
-        entity_types=entity_types,
-        parent_id=parent_id,
-        limit=limit,
-        offset=offset,
-    )
+        Synapse governance distinguishes four account types. Each tier inherits the privileges of the preceding tier and unlocks additional capabilities.
 
-    if isinstance(search_result, dict) and search_result.get("error"):
-        return [search_result]
+        ## Anonymous User
+        - Browse public projects, files, tables, and wiki pages without signing in.
+        - Cannot create projects, download non-public data, upload content, or post in discussions.
 
-    hits: List[Dict[str, object]] = search_result.get("hits", []) if isinstance(search_result, dict) else []
-    if not hits:
-        return []
+        ## Registered User
+        - Can create projects and wiki pages, collaborate with other registered users, and manage Synapse teams.
+        - May download publicly available data and, when project-specific Conditions for Use are satisfied, access controlled data.
+        - Sign up at https://accounts.synapse.org/register1?appId=synapse.org.
 
-    entities: List[Dict[str, object]] = []
-    seen_ids: set[str] = set()
-    for hit in hits:
-        entity_id = hit.get("id") if isinstance(hit, dict) else None
-        if not entity_id or entity_id in seen_ids:
-            continue
-        seen_ids.add(entity_id)
-        entities.append(get_entity.fn(entity_id, ctx))
+        ## Certified User
+        - Gains full Synapse functionality: upload files and tables, create folders, add provenance, and upload Docker containers.
+        - Certification requires passing the 15-question Synapse Commons Data Use Procedure quiz (https://www.synapse.org/#!Quiz:Certification).
 
-    if name:
-        normalized = name.lower()
-        exact_matches = [
-            entity
-            for entity in entities
-            if isinstance(entity, dict)
-            and str(entity.get("name", "")).lower() == normalized
-        ]
-        return exact_matches
+        ## Validated User
+        - Eligible to request access to controlled access tiers (for example mHealth or Bridge datasets).
+        - Validation steps (performed from **Settings → Profile Validation**) include:
+          1. Ensure the profile lists full name, current affiliation, and city/country.
+          2. Link a public ORCID profile containing at least one additional data point.
+          3. Submit the Synapse Pledge.
+          4. Provide identity attestation (signing-official letter, notarized letter, or professional license copy dated within the last month).
+        - A validation badge appears on the profile once the Governance team completes review.
 
-    return entities
+        ### Key Capabilities by Account Type
+        | Capability | Anonymous | Registered | Certified | Validated |
+        | --- | --- | --- | --- | --- |
+        | View public wiki pages | Yes | Yes | Yes | Yes |
+        | Browse public project catalog | Yes | Yes | Yes | Yes |
+        | Browse public file catalog | Yes | Yes | Yes | Yes |
+        | Create projects and wikis | No | Yes | Yes | Yes |
+        | Download files or tables* | No | Yes | Yes | Yes |
+        | Upload files, tables, folders, provenance, Docker | No | No | Yes | Yes |
+        | Request controlled access data** | No | No | No | Yes |
 
+        \* Download access also depends on local sharing settings and fulfilling any Conditions for Use attached to the asset.
 
-@mcp.resource("entities/{id_or_name}")
-def get_entity_by_id_or_name(id_or_name: str) -> Dict[str, object]:
-    """Get entity by ID or name."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
+        \** Click **Request Access** on the dataset to review whether certification and/or validation is required.
 
-    if validate_synapse_id(id_or_name):
-        return get_entity.fn(id_or_name, ctx)
+        ### Group Membership Notes
+        - **Anonymous**: Default state; no group membership.
+        - **Registered Synapse Users** group tracks registered accounts automatically after sign-up.
+        - **Certified Users** group enrollment occurs automatically once the certification quiz is passed.
+        - **Validated Users** group membership is granted by the Synapse Governance team after reviewing validation materials.
 
-    results = _search_entities(ctx, name=id_or_name, limit=20)
-    entity = first_successful_result(results) if results else None
-    if entity:
-        return entity
-    return {"error": f"Entity not found: {id_or_name}"}
+        Regardless of account type, every user must follow the Synapse Terms and Conditions of Use and broader governance policies. Questions can be directed to the Synapse Access and Compliance Team (act@synapse.org).
 
-
-@mcp.resource("entities/{id}/annotations")
-def get_entity_annotations_resource(id: str) -> Dict[str, object]:
-    """Get entity annotations."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-    return get_entity_annotations.fn(id, ctx)
-
-
-@mcp.resource("projects/{id_or_name}")
-def get_project_by_id_or_name(id_or_name: str) -> Dict[str, object]:
-    """Get project by ID or name."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-
-    if validate_synapse_id(id_or_name):
-        entity = get_entity.fn(id_or_name, ctx)
-    else:
-        results = _search_entities(ctx, name=id_or_name, entity_type="project", limit=20)
-        entity = first_successful_result(results) if results else None
-
-    if entity and entity.get("type", "").lower() == "project":
-        return entity
-    if entity and entity.get("error"):
-        return entity
-    return {"error": f"Project not found: {id_or_name}"}
-
-
-@mcp.resource("projects/{id}/annotations")
-def get_project_annotations(id: str) -> Dict[str, object]:
-    """Get project annotations."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-    return get_entity_annotations.fn(id, ctx)
-
-
-@mcp.resource("datasets/{id_or_name}")
-def get_dataset_by_id_or_name(id_or_name: str) -> Dict[str, object]:
-    """Get dataset by ID or name."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-
-    if validate_synapse_id(id_or_name):
-        entity = get_entity.fn(id_or_name, ctx)
-    else:
-        results = _search_entities(ctx, name=id_or_name, entity_type="dataset", limit=20)
-        entity = first_successful_result(results) if results else None
-
-    if entity and entity.get("type", "").lower() == "dataset":
-        return entity
-    if entity and entity.get("error"):
-        return entity
-    return {"error": f"Dataset not found: {id_or_name}"}
-
-
-@mcp.resource("datasets/{id}/annotations")
-def get_dataset_annotations(id: str) -> Dict[str, object]:
-    """Get dataset annotations."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-    return get_entity_annotations.fn(id, ctx)
-
-
-@mcp.resource("folders/{id_or_name}")
-def get_folder_by_id_or_name(id_or_name: str) -> Dict[str, object]:
-    """Get folder by ID or name."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-
-    if validate_synapse_id(id_or_name):
-        entity = get_entity.fn(id_or_name, ctx)
-    else:
-        results = _search_entities(ctx, name=id_or_name, entity_type="folder", limit=20)
-        entity = first_successful_result(results) if results else None
-
-    if entity and entity.get("type", "").lower() == "folder":
-        return entity
-    if entity and entity.get("error"):
-        return entity
-    return {"error": f"Folder not found: {id_or_name}"}
-
-
-@mcp.resource("folders/{id}/annotations")
-def get_folder_annotations(id: str) -> Dict[str, object]:
-    """Get folder annotations."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-    return get_entity_annotations.fn(id, ctx)
-
-
-@mcp.resource("files/{id_or_name}")
-def get_file_by_id_or_name(id_or_name: str) -> Dict[str, object]:
-    """Get file by ID or name."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-
-    if validate_synapse_id(id_or_name):
-        entity = get_entity.fn(id_or_name, ctx)
-    else:
-        results = _search_entities(ctx, name=id_or_name, entity_type="file", limit=20)
-        entity = first_successful_result(results) if results else None
-
-    if entity and entity.get("type", "").lower() == "file":
-        return entity
-    if entity and entity.get("error"):
-        return entity
-    return {"error": f"File not found: {id_or_name}"}
-
-
-@mcp.resource("files/{id}/annotations")
-def get_file_annotations(id: str) -> Dict[str, object]:
-    """Get file annotations."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-    return get_entity_annotations.fn(id, ctx)
-
-
-@mcp.resource("tables/{id_or_name}")
-def get_table_by_id_or_name(id_or_name: str) -> Dict[str, object]:
-    """Get table by ID or name."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-
-    if validate_synapse_id(id_or_name):
-        entity = get_entity.fn(id_or_name, ctx)
-    else:
-        results = _search_entities(ctx, name=id_or_name, entity_type="table", limit=20)
-        entity = first_successful_result(results) if results else None
-
-    if entity and entity.get("type", "").lower() == "table":
-        return entity
-    if entity and entity.get("error"):
-        return entity
-    return {"error": f"Table not found: {id_or_name}"}
-
-
-@mcp.resource("tables/{id}/annotations")
-def get_table_annotations(id: str) -> Dict[str, object]:
-    """Get table annotations."""
-    try:
-        ctx = require_request_context()
-    except ConnectionAuthError as exc:
-        return {"error": str(exc)}
-    return get_entity_annotations.fn(id, ctx)
+        _Source: Synapse Help Center — "Synapse User Account Types" (retrieved {source_date})._
+        """
+    ).strip().format(source_date="2024-09-05")
 
 
 __all__ = [
-    "get_dataset_annotations",
-    "get_dataset_by_id_or_name",
-    "get_entity_annotations_resource",
-    "get_entity_by_id_or_name",
-    "get_file_annotations",
-    "get_file_by_id_or_name",
-    "get_folder_annotations",
-    "get_folder_by_id_or_name",
-    "get_project_annotations",
-    "get_project_by_id_or_name",
-    "get_table_annotations",
-    "get_table_by_id_or_name",
+    "synapse_user_account_types",
 ]
