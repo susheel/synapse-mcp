@@ -3,7 +3,7 @@
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'synapse-mcp'
+app = 'synapse-research-mcp'
 primary_region = 'sea'
 
 [build]
@@ -11,10 +11,9 @@ primary_region = 'sea'
 
 [env]
   HOST = '0.0.0.0'
-  MCP_SERVER_URL = 'https://synapse-mcp.fly.dev/mcp'
+  MCP_SERVER_URL = 'https://mcp.synapse.org/mcp'
   MCP_TRANSPORT = 'streamable-http'
   PORT = '9000'
-  SYNAPSE_OAUTH_REDIRECT_URI='https://synapse-mcp.fly.dev/oauth/callback'
 
 [http_service]
   internal_port = 9000
