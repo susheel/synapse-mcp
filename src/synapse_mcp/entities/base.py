@@ -10,14 +10,17 @@ class BaseEntityOperations:
     
     def get_entity_by_id(self, entity_id: str) -> Dict[str, Any]:
         """Get an entity by ID.
-        
+
         Args:
             entity_id: The Synapse ID of the entity
-            
+
         Returns:
             The entity as a dictionary
         """
-        entity = self.synapse_client.get(entity_id)
+        # IMPORTANT: Always keep downloadFile=False to avoid downloading file content
+        # when fetching entity metadata. This prevents unnecessary downloads and
+        # keeps the operation lightweight for metadata-only operations.
+        entity = self.synapse_client.get(entity_id, downloadFile=False)
         return self.format_entity(entity)
     
     def get_entity_annotations(self, entity_id: str) -> Dict[str, Any]:

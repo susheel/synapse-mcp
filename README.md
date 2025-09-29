@@ -7,37 +7,25 @@ You (your AI agent) can:
 - Get entity annotations
 - List entity children
 - Search Synapse entities with path and type filters
+- Inspect provenance/activity recorded for an entity version
 
 ## Available Tools
 
-| Tool | Description |
-| --- | --- |
-| `get_entity(entity_id)` | Fetch core metadata for a Synapse entity by ID. |
-| `get_entity_annotations(entity_id)` | Return custom annotations associated with an entity. |
-| `get_entity_children(entity_id)` | List children for container entities such as projects and folders. |
-| `search_synapse(query_term=None, ...)` | Search Synapse entities by keyword with optional name/type/parent filters. Results are provided by Synapse as data custodian; attribution and licensing follow the source entity metadata. |
-
-> Resources such as `entities/{id_or_name}` remain available for name-based lookups and table helpers.
+| Tool | Friendly Name | Description |
+| --- | --- | --- |
+| `get_entity(entity_id)` | Fetch Entity | Fetch core metadata for a Synapse entity by ID. |
+| `get_entity_annotations(entity_id)` | Fetch Entity Annotations | Return custom annotations associated with an entity. |
+| `get_entity_provenance(entity_id, version=None)` | Fetch Entity Provenance | Retrieve provenance (activity) metadata for an entity, optionally scoped to a specific version. |
+| `get_entity_children(entity_id)` | List Entity Children | List children for container entities such as projects and folders. |
+| `search_synapse(query_term=None, ...)` | Search Synapse | Search Synapse entities by keyword with optional name/type/parent filters. Results are provided by Synapse as data custodian; attribution and licensing follow the source entity metadata. |
 
 ## Available Resources
 
-Resources return ready-to-present entity metadata. Use tools when you need searches,
-children listings, or other derived results.
+Resources provide ready-to-present context that clients can pull without extra parameters. When you need to search or compute derived results, prefer tools instead.
 
-| Resource | Description |
-| --- | --- |
-| `entities/{id_or_name}` | Resolve an entity by Synapse ID or by name (best-effort search). |
-| `entities/{id}/annotations` | Retrieve annotation key/value pairs for an entity. |
-| `projects/{id_or_name}` | Resolve a project by ID or name. |
-| `projects/{id}/annotations` | Retrieve annotations for a project. |
-| `datasets/{id_or_name}` | Resolve a dataset by ID or name. |
-| `datasets/{id}/annotations` | Retrieve annotations for a dataset. |
-| `folders/{id_or_name}` | Resolve a folder by ID or name. |
-| `folders/{id}/annotations` | Retrieve annotations for a folder. |
-| `files/{id_or_name}` | Resolve a file by ID or name. |
-| `files/{id}/annotations` | Retrieve annotations for a file. |
-| `tables/{id_or_name}` | Resolve a table by ID or name. |
-| `tables/{id}/annotations` | Retrieve annotations for a table. |
+| Resource | Friendly Name | Description |
+| --- | --- | --- |
+| `synapse://feeds/blog` | Sage Blog RSS | Live RSS XML for the latest Sage Bionetworks publication posts. |
 
 ## Usage
 
