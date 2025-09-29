@@ -33,7 +33,7 @@ def _normalize_fields(fields: Optional[List[str]]) -> List[str]:
 
 @mcp.tool(
     title="Fetch Entity",
-    description="Return Synapse entity metadata by ID (projects, folders, files, tables, etc.).",
+    description="Return Synapse entity metadata by ID (projects, folders, files, tables, etc.). Only retrieves metadata information - does not download file content.",
     annotations={
         "readOnlyHint": True,
         "idempotentHint": True,
