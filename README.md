@@ -1,5 +1,7 @@
 # Synapse MCP Server
 
+![synapse_wordmark](https://github.com/user-attachments/assets/7baf44ab-1b77-482d-b96f-84d3cb1dbdc9)
+
 A Model Context Protocol (MCP) server that enables AI agent access to Synapse entities (Datasets, Projects, Folders, Files, Tables, and more).
 
 You (your AI agent) can:
@@ -39,52 +41,30 @@ The Synapse MCP server supports two authentication methods:
 
 2.  **Personal Access Token (PAT):** This method is available for local development or in environments where a browser-based login is not feasible. It requires you to provide a Synapse Personal Access Token to the server.
 
-### Using the MCP Server
+### MCP Server setup
+
+#### Remote Server
+
+Use this URL in your client:
+🔌 https://mcp.synapse.org/mcp
+
+##### Claude Desktop Instructions
+
+Go to Settings > Connectors > Add custom connector
+
+<img width="664" height="146" alt="image" src="https://github.com/user-attachments/assets/fcfe54ba-1c1c-4fa8-9bae-c198cffff6ce" />
+
+##### Claude Code
+
+`claude mcp add --transport http synapse -- https://mcp.synapse.org/mcp`
 
 #### Local Server
 
-**1. Install the Package:**
-```bash
-pip install synapse-mcp
-```
-
-**2. Configure Your AI Client:**
-
-The setup depends on which transport method you need:
-
-**Claude Code with local stdio transport (default):**
-
-The client automatically starts the server process:
-```bash
-claude mcp add synapse -- env SYNAPSE_PAT="YOUR_TOKEN_HERE" synapse-mcp
-```
-
-**Claude Desktop:**
-
-The client automatically starts the server process:
-1.  Open Claude Desktop Settings > Developer > Edit Config.
-2.  Add the following to `mcpServers`:
-    ```json
-    "synapse": {
-      "command": "synapse-mcp",
-      "env": {
-        "SYNAPSE_PAT": "YOUR_TOKEN_HERE"
-      }
-    }
-    ```
-3.  Save the file and restart Claude Desktop.
-
-#### Remote Server (WIP)
-
-Developments are underway for making synapse-mcp available as a remote server. See DEVELOPMENT.md if you would like to contribute. Stay tuned.
-
+For running local server, see [DEVELOPMENT.md](./DEVELOPMENT.md)
 
 ### Example Prompts
 
-Once connected, you can use Synapse data in your conversations:
-- "Create a chart from the data in Synapse table syn123456"
-- "Query all files in the Synapse project syn123456"
-- "Get annotations for the Synapse entity syn123456"
+See [usage examples](./doc/usage.md)
 
 ## Contributing
 
@@ -92,4 +72,11 @@ Contributions are welcome! Please see our [Development Guide](./DEVELOPMENT.md) 
 
 ## License
 
-MIT
+ **MIT**
+
+## Contact
+
+![synapse_icon](https://github.com/user-attachments/assets/b629f426-ae1b-4179-87d2-ac2c73419644)
+
+For issues, please file an issue. For other contact, see https://sagebionetworks.org/contact.
+
