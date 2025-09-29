@@ -9,7 +9,7 @@ from .context_helpers import (
     get_request_context,
     require_request_context,
 )
-from .resources import synapse_user_account_types
+from .resources import synapse_blog_feed
 from .tools import (
     get_entity,
     get_entity_annotations,
@@ -61,5 +61,5 @@ __all__ = [
     "mcp",
     "require_request_context",
     "search_synapse",
-    "synapse_user_account_types",
+    "synapse_blog_feed",
 ]
