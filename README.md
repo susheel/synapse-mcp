@@ -25,7 +25,7 @@ Resources provide ready-to-present context that clients can pull without extra p
 
 | Resource | Friendly Name | Description |
 | --- | --- | --- |
-| `synapse://guides/user-account-types` | Synapse Account Types | Markdown summary of Synapse user account types and their capabilities. |
+| `synapse://feeds/blog` | Sage Blog RSS | Live RSS XML for the latest Sage Bionetworks publication posts. |
 
 ## Usage
 
