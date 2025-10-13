@@ -3,8 +3,17 @@
 import synapse_mcp.oauth.config as config
 
 
-def test_should_skip_oauth_with_pat():
+def test_should_skip_oauth_with_pat_only():
     assert config.should_skip_oauth({"SYNAPSE_PAT": "token"}) is True
+
+
+def test_should_not_skip_oauth_when_oauth_credentials_present():
+    env = {
+        "SYNAPSE_PAT": "token",
+        "SYNAPSE_OAUTH_CLIENT_ID": "client",
+        "SYNAPSE_OAUTH_CLIENT_SECRET": "secret",
+    }
+    assert config.should_skip_oauth(env) is False
 
 
 def test_load_oauth_settings_missing_values():
