@@ -1,6 +1,6 @@
 """Public exports for the Synapse MCP package."""
 
-from .app import auth, health_check, initialize_server, mcp
+from .app import auth, health_check, mcp
 from .connection_auth import get_synapse_client
 from .context_helpers import (
     ConnectionAuthError,
@@ -28,7 +28,6 @@ __all__ = [
     "get_synapse_client",
     "get_request_context",
     "health_check",
-    "initialize_server",
     "mcp",
     "require_request_context",
     "search_synapse",

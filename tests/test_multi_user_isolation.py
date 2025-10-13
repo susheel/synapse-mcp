@@ -44,9 +44,12 @@ def test_get_synapse_client_creates_connection_scoped_clients(monkeypatch):
     ctx1 = DummyContext()
     ctx2 = DummyContext()
 
+    # Simulate middleware injecting PAT token into context
+    ctx1.set_state("synapse_pat_token", "fake-pat")
+    ctx2.set_state("synapse_pat_token", "fake-pat")
+
     clients = [_make_client("user1"), _make_client("user2")]
     monkeypatch.setattr(connection_auth.synapseclient, "Synapse", lambda *args, **kwargs: clients.pop(0))
-    monkeypatch.setenv("SYNAPSE_PAT", "fake-pat")
 
     client1 = connection_auth.get_synapse_client(ctx1)
     client2 = connection_auth.get_synapse_client(ctx2)
@@ -60,13 +63,15 @@ def test_get_synapse_client_uses_cached_client(monkeypatch):
     ctx = DummyContext()
     created = []
 
+    # Simulate middleware injecting PAT token into context
+    ctx.set_state("synapse_pat_token", "fake-pat")
+
     def factory(*args, **kwargs):
         client = _make_client("cached")
         created.append(client)
         return client
 
     monkeypatch.setattr(connection_auth.synapseclient, "Synapse", factory)
-    monkeypatch.setenv("SYNAPSE_PAT", "fake-pat")
 
     first = connection_auth.get_synapse_client(ctx)
     second = connection_auth.get_synapse_client(ctx)
