@@ -6,19 +6,24 @@ user isolation and prevent cross-user data leakage in production deployments.
 
 ## Architecture
 
-The auth_middleware extracts and validates OAuth tokens from the Authorization
-header in every request, storing them in context. This module simply reads the
-validated token from context and uses it to authenticate the synapseclient.
+Authentication middleware (OAuthTokenMiddleware or PATAuthMiddleware) injects
+tokens into the request context. This module retrieves tokens from context
+and authenticates the synapseclient.
 
-Flow:
-1. Middleware extracts token from Authorization header
+## OAuth Flow (Production):
+1. OAuthTokenMiddleware extracts token from Authorization header
 2. Middleware validates JWT (expiration, structure)
-3. Middleware stores token in context state
+3. Middleware stores token in context: "oauth_access_token"
 4. This module reads token from context
 5. This module authenticates synapseclient with the token
+
+## PAT Flow (Development):
+1. PATAuthMiddleware loads SYNAPSE_PAT from environment at startup
+2. Middleware injects token into context on each request: "synapse_pat_token"
+3. This module reads token from context
+4. This module authenticates synapseclient with the token
 """
 
-import os
 import logging
 from typing import Optional, Dict, Any
 from fastmcp import Context
@@ -110,55 +115,55 @@ def get_synapse_client(ctx: Context) -> synapseclient.Synapse:
 
 def _authenticate_client(client: synapseclient.Synapse, ctx: Context) -> bool:
     """
-    Authenticate a synapseclient instance using available credentials.
+    Authenticate a synapseclient instance using token from context.
 
-    Priority order:
-    1. PAT from environment variable (development)
-    2. OAuth access token from FastMCP auth context (production)
-    3. No authentication (public access only)
+    The appropriate middleware (OAuthTokenMiddleware or PATAuthMiddleware)
+    has already injected the authentication token into the context.
+    This function simply retrieves it and authenticates the client.
 
     Args:
         client: synapseclient instance to authenticate
-        ctx: FastMCP context containing auth information
+        ctx: FastMCP context containing auth token
 
     Returns:
         bool: True if authentication succeeded, False otherwise
     """
     try:
-        # Try PAT authentication first (development mode)
-        if _try_pat_authentication(client, ctx):
-            return True
+        # Check for OAuth token (production mode)
+        oauth_token = _get_state(ctx, "oauth_access_token")
+        if oauth_token:
+            return _authenticate_with_oauth(client, ctx, oauth_token)
 
-        # Fall back to OAuth access token (production mode)
-        if _try_oauth_authentication(client, ctx):
-            return True
+        # Check for PAT token (development mode)
+        pat_token = _get_state(ctx, "synapse_pat_token")
+        if pat_token:
+            return _authenticate_with_pat(client, ctx, pat_token)
 
-        # No authentication available - fail securely
-        logger.error("No authentication credentials available - authentication required")
+        # No token found in context - fail securely
+        logger.error("No authentication token found in context - authentication required")
         return False
 
     except Exception as e:
         logger.error(f"Authentication failed: {e}")
         return False
 
-def _try_oauth_authentication(client: synapseclient.Synapse, ctx: Context) -> bool:
+def _authenticate_with_oauth(client: synapseclient.Synapse, ctx: Context, token: str) -> bool:
     """
-    Try to authenticate using OAuth access token from context.
+    Authenticate synapseclient using OAuth access token.
 
-    The middleware has already extracted and validated the token from the
-    Authorization header and stored it in context. We simply read it and
-    use it to authenticate the synapseclient.
+    The OAuthTokenMiddleware has already validated this token and stored it in context.
+
+    Args:
+        client: synapseclient instance to authenticate
+        ctx: FastMCP context for storing auth info
+        token: Validated OAuth access token
+
+    Returns:
+        bool: True if authentication succeeded
     """
     try:
-        # Get token from context (middleware already validated and stored it)
-        access_token = _get_state(ctx, "oauth_access_token")
-
-        if not access_token:
-            logger.debug("No OAuth access token found in context - middleware should have set it")
-            return False
-
         # Authenticate using the access token
-        client.login(authToken=access_token)
+        client.login(authToken=token)
 
         # Get user profile to verify authentication
         profile = client.getUserProfile()
@@ -174,23 +179,26 @@ def _try_oauth_authentication(client: synapseclient.Synapse, ctx: Context) -> bo
         return True
 
     except Exception as e:
-        logger.debug(f"OAuth authentication failed: {e}")
+        logger.error(f"OAuth authentication failed: {e}")
         return False
 
-def _try_pat_authentication(client: synapseclient.Synapse, ctx: Context) -> bool:
+def _authenticate_with_pat(client: synapseclient.Synapse, ctx: Context, token: str) -> bool:
     """
-    Try to authenticate using Personal Access Token from environment.
+    Authenticate synapseclient using Personal Access Token.
 
-    This is primarily for development and local testing scenarios.
+    The PATAuthMiddleware has already loaded this token from environment and stored it in context.
+
+    Args:
+        client: synapseclient instance to authenticate
+        ctx: FastMCP context for storing auth info
+        token: PAT token from environment
+
+    Returns:
+        bool: True if authentication succeeded
     """
     try:
-        synapse_pat = os.environ.get("SYNAPSE_PAT")
-        if not synapse_pat:
-            logger.debug("No SYNAPSE_PAT environment variable found")
-            return False
-
         # Authenticate using PAT
-        client.login(authToken=synapse_pat, silent=True)
+        client.login(authToken=token, silent=True)
 
         # Get user profile to verify authentication
         profile = client.getUserProfile()
@@ -207,7 +215,7 @@ def _try_pat_authentication(client: synapseclient.Synapse, ctx: Context) -> bool
         return True
 
     except Exception as e:
-        logger.debug(f"PAT authentication failed: {e}")
+        logger.error(f"PAT authentication failed: {e}")
         return False
 
 def get_user_auth_info(ctx: Context) -> Optional[Dict[str, Any]]:

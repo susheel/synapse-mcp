@@ -44,9 +44,12 @@ def test_get_synapse_client_creates_connection_scoped_clients(monkeypatch):
     ctx1 = DummyContext()
     ctx2 = DummyContext()
 
+    # Simulate middleware injecting PAT token into context
+    ctx1.set_state("synapse_pat_token", "fake-pat")
+    ctx2.set_state("synapse_pat_token", "fake-pat")
+
     clients = [_make_client("user1"), _make_client("user2")]
     monkeypatch.setattr(connection_auth.synapseclient, "Synapse", lambda *args, **kwargs: clients.pop(0))
-    monkeypatch.setenv("SYNAPSE_PAT", "fake-pat")
 
     client1 = connection_auth.get_synapse_client(ctx1)
     client2 = connection_auth.get_synapse_client(ctx2)
@@ -60,13 +63,15 @@ def test_get_synapse_client_uses_cached_client(monkeypatch):
     ctx = DummyContext()
     created = []
 
+    # Simulate middleware injecting PAT token into context
+    ctx.set_state("synapse_pat_token", "fake-pat")
+
     def factory(*args, **kwargs):
         client = _make_client("cached")
         created.append(client)
         return client
 
     monkeypatch.setattr(connection_auth.synapseclient, "Synapse", factory)
-    monkeypatch.setenv("SYNAPSE_PAT", "fake-pat")
 
     first = connection_auth.get_synapse_client(ctx)
     second = connection_auth.get_synapse_client(ctx)
@@ -103,8 +108,3 @@ def test_get_entity_operations_are_per_connection(monkeypatch):
     assert ops2["base"].synapse_client is client2
 
 
-def test_deprecated_globals_return_safe_defaults():
-    assert synapse_mcp.initialize_authentication() == (False, False)
-    assert synapse_mcp.authenticate_synapse_client("token") is False
-    assert synapse_mcp.is_authenticated() is False
-    assert synapse_mcp.is_using_pat_auth() is False

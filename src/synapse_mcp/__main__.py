@@ -52,11 +52,8 @@ def main():
         logger.info("Starting Synapse MCP server with STDIO transport")
 
     # Import after environment is set up
+    # Authentication is configured during module import
     from synapse_mcp import mcp
-    from synapse_mcp.server import initialize_server
-
-    # Initialize server authentication
-    initialize_server()
 
     # Use FastMCP's built-in server runner
     try:

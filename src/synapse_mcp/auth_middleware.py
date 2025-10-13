@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import logging
+import os
 from typing import Any, Optional
 
 from fastmcp.server.middleware import Middleware, MiddlewareContext
@@ -265,4 +266,86 @@ class OAuthTokenMiddleware(Middleware):
         return None
 
 
-__all__ = ["OAuthTokenMiddleware"]
+class PATAuthMiddleware(Middleware):
+    """
+    Middleware for PAT (Personal Access Token) authentication in development mode.
+
+    This middleware extracts a SYNAPSE_PAT from environment variables at initialization
+    and injects it into the request context for each tool/resource call.
+
+    Unlike OAuth, PAT authentication:
+    - Does not require Authorization headers
+    - Uses a single token from environment for all connections
+    - Provides full_access permissions
+    - Is intended for development/testing only
+
+    The PAT is checked once at middleware initialization (not on every request),
+    providing better performance than runtime environment variable lookups.
+    """
+
+    def __init__(self):
+        """Initialize PAT middleware with token from environment."""
+        self.synapse_pat = os.environ.get("SYNAPSE_PAT")
+        if not self.synapse_pat:
+            raise ValueError(
+                "PATAuthMiddleware requires SYNAPSE_PAT environment variable. "
+                "Set SYNAPSE_PAT for development mode."
+            )
+        logger.info("PAT authentication enabled (development mode)")
+        logger.debug("PAT token loaded from environment: %s", mask_token(self.synapse_pat))
+
+    async def on_call_tool(self, context: MiddlewareContext, call_next):
+        """
+        Intercepts a tool call to inject PAT token into the context.
+
+        Args:
+            context: The middleware context for the current call.
+            call_next: A callable that invokes the next middleware.
+
+        Returns:
+            The result of the next middleware in the chain.
+        """
+        await self._inject_pat(context)
+        return await call_next(context)
+
+    async def on_call_resource(self, context: MiddlewareContext, call_next):
+        """
+        Intercepts a resource call to inject PAT token into the context.
+
+        Args:
+            context: The middleware context for the current call.
+            call_next: A callable that invokes the next middleware.
+
+        Returns:
+            The result of the next middleware in the chain.
+        """
+        await self._inject_pat(context)
+        return await call_next(context)
+
+    async def _inject_pat(self, context: MiddlewareContext) -> None:
+        """
+        Inject PAT token into the request context.
+
+        Stores the PAT in the fastmcp_context state so connection_auth
+        can retrieve it without needing to read from environment variables.
+        """
+        fast_ctx = getattr(context, "fastmcp_context", None)
+
+        logger.debug(
+            "_inject_pat invoked: context=%s fastmcp_context=%s",
+            type(context).__name__,
+            type(fast_ctx).__name__ if fast_ctx else None,
+        )
+
+        if fast_ctx is None:
+            logger.warning("Missing fastmcp_context; unable to inject PAT")
+            return
+
+        if hasattr(fast_ctx, "set_state"):
+            fast_ctx.set_state("synapse_pat_token", self.synapse_pat)
+            logger.debug("Injected PAT token into context")
+        else:
+            logger.warning("FastMCP context does not expose set_state; unable to inject PAT")
+
+
+__all__ = ["OAuthTokenMiddleware", "PATAuthMiddleware"]
