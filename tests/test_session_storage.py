@@ -16,6 +16,7 @@ def test_create_session_storage_prefers_redis(monkeypatch):
 
     monkeypatch.setattr(redis_backend, "REDIS_AVAILABLE", True)
     monkeypatch.setattr(storage, "REDIS_AVAILABLE", True)
+    monkeypatch.setattr(storage, "_redis_connection_available", lambda url: True)
 
     class DummyStorage(SessionStorage):
         async def set_user_token(self, user_subject: str, access_token: str, ttl_seconds: int = 3600) -> None:
@@ -51,6 +52,19 @@ def test_create_session_storage_falls_back_when_redis_unavailable(monkeypatch):
 
     monkeypatch.setattr(redis_backend, "REDIS_AVAILABLE", False)
     monkeypatch.setattr(storage, "REDIS_AVAILABLE", False)
+
+    store = storage.create_session_storage(env)
+    assert isinstance(store, storage.InMemorySessionStorage)
+
+
+def test_create_session_storage_falls_back_when_ping_fails(monkeypatch):
+    env = {"REDIS_URL": "redis://example"}
+
+    import synapse_mcp.session_storage.redis_backend as redis_backend
+
+    monkeypatch.setattr(redis_backend, "REDIS_AVAILABLE", True)
+    monkeypatch.setattr(storage, "REDIS_AVAILABLE", True)
+    monkeypatch.setattr(storage, "_redis_connection_available", lambda url: False)
 
     store = storage.create_session_storage(env)
     assert isinstance(store, storage.InMemorySessionStorage)

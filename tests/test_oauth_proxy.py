@@ -8,6 +8,7 @@ import pytest
 from fastmcp.server.auth.oauth_proxy import OAuthClientInformationFull, OAuthProxy
 from starlette.responses import RedirectResponse
 
+import synapse_mcp.connection_auth as connection_auth
 from synapse_mcp.oauth.proxy import SessionAwareOAuthProxy
 
 
@@ -63,17 +64,19 @@ class FakeStorage:
         return None
 
 
-def build_proxy(monkeypatch, storage, registry: FakeRegistry | None = None):
+def build_proxy(monkeypatch, storage, registry: FakeRegistry | None = None, token_verifier=None):
     monkeypatch.setattr("synapse_mcp.oauth.proxy.create_session_storage", lambda: storage)
     if registry is not None:
         monkeypatch.setattr("synapse_mcp.oauth.proxy.create_client_registry", lambda *_, **__: registry)
+    if token_verifier is None:
+        token_verifier = SimpleNamespace(required_scopes=[])
     return SessionAwareOAuthProxy(
         upstream_authorization_endpoint="https://auth",
         upstream_token_endpoint="https://token",
         upstream_client_id="client",
         upstream_client_secret="secret",
         redirect_path="/oauth/callback",
-        token_verifier=SimpleNamespace(required_scopes=[]),
+        token_verifier=token_verifier,
         base_url="http://localhost",
     )
 
@@ -283,3 +286,60 @@ async def test_static_clients_loaded_from_env(monkeypatch):
     proxy = build_proxy(monkeypatch, storage, FakeRegistry())
 
     assert "static-client" in proxy._clients
+
+
+@pytest.mark.anyio
+async def test_verify_token_allows_connection_auth(monkeypatch):
+    class DummyVerifier:
+        required_scopes = ["view"]
+
+        async def verify_token(self, token):
+            return SimpleNamespace(
+                token=token,
+                raw_token=token,
+                client_id="client-123",
+                scopes=["view"],
+                expires_at=999999999,
+                sub="user-123",
+            )
+
+    storage = FakeStorage()
+    proxy = build_proxy(monkeypatch, storage, FakeRegistry(), token_verifier=DummyVerifier())
+
+    token = "oauth-token-123"
+    access_token = await proxy.verify_token(token)
+    assert access_token is not None
+    assert access_token.scopes == ["view"]
+
+    class DummySynapse:
+        def __init__(self, *_, **__):
+            self.logged_in = None
+
+        def login(self, authToken=None, **kwargs):
+            self.logged_in = authToken
+
+        def getUserProfile(self):
+            return {"ownerId": "user-123", "userName": "tester"}
+
+    monkeypatch.setattr(connection_auth.synapseclient, "Synapse", DummySynapse)
+
+    class DummyContext:
+        def __init__(self):
+            self._state = {}
+
+        def get_state(self, key, default=None):
+            if key in self._state:
+                return self._state[key]
+            if default is not None:
+                return default
+            raise KeyError(key)
+
+        def set_state(self, key, value):
+            self._state[key] = value
+
+    ctx = DummyContext()
+    ctx.set_state("oauth_access_token", token)
+
+    client = connection_auth.get_synapse_client(ctx)
+    assert isinstance(client, DummySynapse)
+    assert client.logged_in == token
