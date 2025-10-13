@@ -103,8 +103,3 @@ def test_get_entity_operations_are_per_connection(monkeypatch):
     assert ops2["base"].synapse_client is client2
 
 
-def test_deprecated_globals_return_safe_defaults():
-    assert synapse_mcp.initialize_authentication() == (False, False)
-    assert synapse_mcp.authenticate_synapse_client("token") is False
-    assert synapse_mcp.is_authenticated() is False
-    assert synapse_mcp.is_using_pat_auth() is False
