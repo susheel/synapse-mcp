@@ -1,4 +1,8 @@
-"""Tests for connection_auth fallbacks."""
+"""Tests for connection_auth module.
+
+Tests that connection_auth correctly reads OAuth tokens from context
+that were set by the auth_middleware.
+"""
 
 from types import SimpleNamespace
 
@@ -8,13 +12,12 @@ import synapse_mcp.connection_auth as connection_auth
 
 
 class DummyContext:
-    def __init__(self, proxy):
+    def __init__(self, oauth_token=None):
         self._state = {}
         self.session_id = "session-1"
-        self.fastmcp_context = SimpleNamespace(
-            session_id="session-1",
-            fastmcp=SimpleNamespace(auth=proxy),
-        )
+        # Middleware would have set the oauth_access_token in context
+        if oauth_token:
+            self._state["oauth_access_token"] = oauth_token
 
     def get_state(self, key):
         if key in self._state:
@@ -23,18 +26,6 @@ class DummyContext:
 
     def set_state(self, key, value):
         self._state[key] = value
-
-
-@pytest.fixture
-def dummy_proxy():
-    class Proxy:
-        def __init__(self):
-            self.mapping = {"session-1": ("token-abc", "user-123")}
-
-        def get_session_token_info(self, session_id):
-            return self.mapping.get(session_id)
-
-    return Proxy()
 
 
 @pytest.fixture
@@ -58,8 +49,10 @@ def patched_synapse(monkeypatch):
     return created
 
 
-def test_oauth_fallback_uses_session_mapping(dummy_proxy, patched_synapse):
-    ctx = DummyContext(dummy_proxy)
+def test_oauth_authentication_uses_token_from_context(patched_synapse):
+    """Test that connection_auth reads OAuth token from context (set by middleware)."""
+    # Middleware has already set the token in context
+    ctx = DummyContext(oauth_token="token-abc")
 
     client = connection_auth.get_synapse_client(ctx)
     assert patched_synapse[0].logged_in == "token-abc"
