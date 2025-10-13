@@ -22,7 +22,10 @@ REDIRECT_SUFFIX = "/oauth/callback"
 
 def should_skip_oauth(env: Optional[Mapping[str, str]] = None) -> bool:
     env = _ensure_env(env)
-    return bool(env.get("SYNAPSE_PAT"))
+    has_pat = bool(env.get("SYNAPSE_PAT"))
+    has_oauth = bool(env.get("SYNAPSE_OAUTH_CLIENT_ID")) and bool(env.get("SYNAPSE_OAUTH_CLIENT_SECRET"))
+    # Only skip OAuth when PAT mode is the only viable option.
+    return has_pat and not has_oauth
 
 
 def load_oauth_settings(env: Optional[Mapping[str, str]] = None) -> Optional[OAuthSettings]:
