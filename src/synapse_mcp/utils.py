@@ -74,3 +74,22 @@ def validate_synapse_id(entity_id: str) -> bool:
     # Check if the rest of the ID is numeric
     id_part = entity_id[3:]
     return id_part.isdigit()
+
+
+def mask_token(token: Optional[str]) -> Optional[str]:
+    """Mask a sensitive token for logging, showing only the first 6 characters."""
+    return mask_identifier(token, prefix=6)
+
+
+def mask_identifier(value: Optional[str], *, prefix: int = 6) -> Optional[str]:
+    """Mask a sensitive identifier for logging.
+
+    Args:
+        value: The identifier to mask.
+        prefix: The number of characters to leave unmasked at the beginning.
+    """
+    if not value:
+        return value
+    if len(value) <= prefix:
+        return value[0] + "***"
+    return value[:prefix] + "***"
