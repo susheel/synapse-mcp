@@ -164,12 +164,10 @@ def _try_oauth_authentication(client: synapseclient.Synapse, ctx: Context) -> bo
         profile = client.getUserProfile()
 
         # Store auth info in context
-        scopes = _get_state(ctx, "token_scopes") or []
         _set_state(ctx, USER_AUTH_INFO_KEY, {
             "method": "oauth",
             "user_id": profile.get("ownerId"),
             "username": profile.get("userName"),
-            "scopes": scopes
         })
 
         logger.info(f"OAuth authentication successful for user: {profile.get('userName')}")

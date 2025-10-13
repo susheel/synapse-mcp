@@ -262,25 +262,3 @@ async def test_middleware_works_for_resource_calls():
         result = await middleware.on_call_resource(context, call_next)
         assert result == "ok"
         assert fast_ctx.get_state("oauth_access_token") == token
-
-
-@pytest.mark.anyio
-async def test_middleware_stores_session_id():
-    """Middleware should store session_id in context state."""
-    token = create_valid_jwt()
-
-    with patch("synapse_mcp.auth_middleware.get_http_request") as mock_get_request:
-        mock_get_request.return_value = DummyHTTPRequest(
-            headers={"authorization": f"Bearer {token}"}
-        )
-
-        middleware = OAuthTokenMiddleware()
-        fast_ctx = DummyFastMCPContext()
-        fast_ctx.session_id = "test-session-123"
-        context = SimpleNamespace(fastmcp_context=fast_ctx)
-
-        async def call_next(ctx):
-            return "ok"
-
-        await middleware.on_call_tool(context, call_next)
-        assert fast_ctx.get_state("session_id") == "test-session-123"

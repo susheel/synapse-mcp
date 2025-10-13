@@ -36,10 +36,9 @@ because the client sends the token with every request. This ensures:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
-from typing import Any, Optional, Sequence
+from typing import Any, Optional
 
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 try:
@@ -104,15 +103,6 @@ def validate_jwt_token(token: str) -> None:
     except Exception as e:
         logger.error("Token validation error: %s", e)
         raise AuthenticationError("Token validation failed")
-
-
-@dataclass
-class TokenBundle:
-    """A container for an OAuth token and its associated metadata."""
-
-    token: str
-    scopes: Sequence[str]
-    subject: Optional[str]
 
 
 class OAuthTokenMiddleware(Middleware):
@@ -200,39 +190,16 @@ class OAuthTokenMiddleware(Middleware):
             return
 
         # Resolve and validate token - raises AuthenticationError on failure
-        bundle = await self._resolve_token_bundle(context, fast_ctx)
+        token = await self._resolve_token(context, fast_ctx)
 
-        session_id = getattr(fast_ctx, "session_id", None)
-        logger.debug(
-            "Resolved bundle -> token=%s subject=%s session_id=%s",
-            mask_token(bundle.token),
-            bundle.subject,
-            mask_identifier(session_id),
-        )
-
+        # Store validated token in context for connection_auth to use
         if hasattr(fast_ctx, "set_state"):
-            fast_ctx.set_state("oauth_access_token", bundle.token)
-            fast_ctx.set_state("token_scopes", list(bundle.scopes))
-            fast_ctx.set_state("user_subject", bundle.subject)
-            if session_id is not None:
-                fast_ctx.set_state("session_id", session_id)
-            logger.info("Stored OAuth token for subject: %s", bundle.subject)
+            fast_ctx.set_state("oauth_access_token", token)
+            logger.debug("Stored validated OAuth token in context")
         else:
-            logger.warning("FastMCP context does not expose set_state; unable to cache token")
+            logger.warning("FastMCP context does not expose set_state; unable to store token")
 
-        if session_id and hasattr(fast_ctx, "fastmcp"):
-            auth_proxy = getattr(fast_ctx.fastmcp, "auth", None)
-            cache_fn = getattr(auth_proxy, "cache_session_token", None)
-            if callable(cache_fn):
-                cache_fn(session_id, bundle.token, bundle.subject)
-                logger.debug(
-                    "Recorded session token via proxy helper: session=%s token=%s subject=%s",
-                    mask_identifier(session_id),
-                    mask_token(bundle.token),
-                    bundle.subject,
-                )
-
-    async def _resolve_token_bundle(self, context: MiddlewareContext, fast_ctx: Any) -> TokenBundle:
+    async def _resolve_token(self, context: MiddlewareContext, fast_ctx: Any) -> str:
         """
         Resolve and validate OAuth token from the request.
 
@@ -247,7 +214,7 @@ class OAuthTokenMiddleware(Middleware):
             AuthenticationError (HTTP 401): If token is missing, invalid, or expired
 
         Returns:
-            TokenBundle: Validated token with metadata
+            str: Validated token
         """
 
         token = None
@@ -278,9 +245,8 @@ class OAuthTokenMiddleware(Middleware):
 
         # Last resort: Check for bearer token in context message headers
         if not token:
-            header_bundle = _bundle_from_headers(context)
-            if header_bundle:
-                token = header_bundle.token
+            token = self._extract_token_from_headers(context)
+            if token:
                 logger.info("Extracted token from context headers: %s", mask_token(token))
 
         # MCP spec requirement: Token MUST be present
@@ -292,18 +258,18 @@ class OAuthTokenMiddleware(Middleware):
         validate_jwt_token(token)
 
         # Return validated token
-        return TokenBundle(token=token, scopes=[], subject=None)
+        return token
 
-
-def _bundle_from_headers(context: MiddlewareContext) -> Optional[TokenBundle]:
-    message = getattr(context, "message", None)
-    headers = getattr(message, "headers", {}) if message else {}
-    auth_header = headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header[len("Bearer "):]
-        logger.debug("Using Authorization header bearer token")
-        return TokenBundle(token=token, scopes=[], subject=None)
-    return None
+    def _extract_token_from_headers(self, context: MiddlewareContext) -> Optional[str]:
+        """Extract token from context message headers."""
+        message = getattr(context, "message", None)
+        headers = getattr(message, "headers", {}) if message else {}
+        auth_header = headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[len("Bearer "):]
+            logger.debug("Using Authorization header bearer token")
+            return token
+        return None
 
 
 # Note: Removed _get_state, _bundle_from_state, and _bundle_from_proxy functions.
