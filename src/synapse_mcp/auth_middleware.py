@@ -7,13 +7,10 @@ Model Context Protocol specification.
 ## MCP Specification Compliance
 
 Per MCP spec (https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization):
-- "authorization MUST be included in every HTTP request from client to server"
-- "Tokens MUST be included using the Authorization header"
-- "Servers MUST validate access tokens as described in OAuth 2.1 Section 5.2"
 
 ## Token Validation
 
-This middleware validates every request:
+Validates every request:
 1. **Extracts** token from Authorization header: `Authorization: Bearer <token>`
 2. **Validates** JWT structure and expiration
 3. **Returns HTTP 401** if token is missing, invalid, or expired
@@ -27,8 +24,7 @@ Per OAuth 2.1 / MCP spec:
 
 ## Architecture
 
-Each request is independently authenticated. No caching or session lookups needed
-because the client sends the token with every request. This ensures:
+Each request is independently authenticated. No caching or session lookups bc client sends token with every request.
 - Proper multi-user isolation
 - Spec compliance
 - Simple, auditable auth flow
@@ -109,15 +105,14 @@ class OAuthTokenMiddleware(Middleware):
     """
     Extracts OAuth tokens from request headers for multi-user FastMCP servers.
 
-    This middleware intercepts tool and resource calls, extracts the OAuth token
+    Intercepts tool and resource calls, extracts the OAuth token
     from the Authorization header, and stores it in the fastmcp_context for use
     by downstream tools.
 
     The token is expected in the Authorization header as:
         Authorization: Bearer <synapse_jwt_token>
 
-    This ensures each request is independently authenticated, maintaining proper
-    multi-user isolation.
+    Each request is independently authenticated, maintaining proper multi-user isolation.
     """
 
     async def on_call_tool(self, context: MiddlewareContext, call_next):
@@ -220,7 +215,6 @@ class OAuthTokenMiddleware(Middleware):
         token = None
 
         # Primary path: Extract from Authorization header
-        # This is where Claude Code/Desktop sends the Synapse JWT
         if get_http_request:
             try:
                 http_request = get_http_request()
@@ -249,7 +243,6 @@ class OAuthTokenMiddleware(Middleware):
             if token:
                 logger.info("Extracted token from context headers: %s", mask_token(token))
 
-        # MCP spec requirement: Token MUST be present
         if not token:
             logger.warning("No Authorization header in request - HTTP 401")
             raise AuthenticationError("Missing Authorization header")
@@ -270,11 +263,6 @@ class OAuthTokenMiddleware(Middleware):
             logger.debug("Using Authorization header bearer token")
             return token
         return None
-
-
-# Note: Removed _get_state, _bundle_from_state, and _bundle_from_proxy functions.
-# In a multi-user environment, each request includes the token in the Authorization header.
-# We don't need complex proxy lookups or state caching.
 
 
 __all__ = ["OAuthTokenMiddleware"]
