@@ -9,11 +9,20 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Create an unprivileged user to run the application
+RUN groupadd --system synapse && useradd --system --gid synapse --home /app synapse
+
 # Copy the project files
 COPY . .
 
 # Install the package in development mode
 RUN pip install --no-cache-dir -e .
+
+# Ensure application files are owned by the runtime user
+RUN chown -R synapse:synapse /app
+
+# Drop root privileges for runtime
+USER synapse
 
 # Expose the port
 EXPOSE 9000
