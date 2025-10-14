@@ -31,4 +31,3 @@ jobs:
 
       - name: Docker build
         run: docker build --tag synapse-mcp .
-Ho
