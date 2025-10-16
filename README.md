@@ -29,6 +29,23 @@ Resources provide ready-to-present context that clients can pull without extra p
 | --- | --- | --- |
 | `synapse://feeds/blog` | Sage Blog RSS | Live RSS XML for the latest Sage Bionetworks publication posts. |
 
+I’d be happy to help you draft a clear disclaimer for the Synapse MCP server. Here are a few options with different tones and levels of detail:
+
+## ⚠️ Terms of Service Compliance Notice
+
+**Important:** When using this MCP server with external AI services (such as Claude, ChatGPT, or other cloud-based models), please be aware that:
+
+- You will use your personal Synapse access token to retrieve data
+- Data sent to external AI services may be stored, logged, or used for model training
+- **The Synapse Terms of Service prohibit redistribution of data**, which may include storage or use by third-party AI providers
+
+**Recommended Safe Usage:**
+- ✅ Use with enterprise AI deployments with data residency guarantees
+- ✅ Use with local/self-hosted AI models
+- ❌ Avoid use with consumer AI services that may store or train on your data
+
+**You are responsible for ensuring your usage complies with the [Synapse Terms of Service](https://www.synapse.org/TrustCenter:TermsOfService).**
+
 ## Usage
 
 This guide provides typical user instructions for connecting to the Synapse MCP server. For contributor setup, please see [DEVELOPMENT.md](./DEVELOPMENT.md).
