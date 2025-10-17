@@ -40,6 +40,7 @@ Resources provide ready-to-present context that clients can pull without extra p
 **Recommended Safe Usage:**
 - ✅ Use with enterprise AI deployments with data residency guarantees
 - ✅ Use with local/self-hosted AI models
+- ✅ Leverage responsible AI use training if provided
 - ❌ Avoid use with consumer AI services that may store or train on your data
 
 **You are responsible for ensuring your usage complies with the [Synapse Terms of Service](https://www.synapse.org/TrustCenter:TermsOfService).**
