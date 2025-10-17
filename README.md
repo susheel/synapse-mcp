@@ -29,8 +29,6 @@ Resources provide ready-to-present context that clients can pull without extra p
 | --- | --- | --- |
 | `synapse://feeds/blog` | Sage Blog RSS | Live RSS XML for the latest Sage Bionetworks publication posts. |
 
-I’d be happy to help you draft a clear disclaimer for the Synapse MCP server. Here are a few options with different tones and levels of detail:
-
 ## ⚠️ Terms of Service Compliance Notice
 
 **Important:** When using this MCP server with external AI services (such as Claude, ChatGPT, or other cloud-based models), please be aware that:
