@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/susheel-synapse-mcp-badge.png)](https://mseep.ai/app/susheel-synapse-mcp)
+
 # Synapse MCP Server
 
 ![synapse_wordmark](https://github.com/user-attachments/assets/7baf44ab-1b77-482d-b96f-84d3cb1dbdc9)
